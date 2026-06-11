@@ -1,0 +1,7 @@
+/* Minor application layouts */
+.app-container {
+  max-width: 448px; /* max-w-md matching */
+  margin-left: auto;
+  margin-right: auto;
+  min-height: 100vh;
+}
