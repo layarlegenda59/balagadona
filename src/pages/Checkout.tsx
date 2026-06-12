@@ -54,22 +54,31 @@ export default function Checkout() {
   const isFreeOngkir = totalPortions >= 3 && selectedDistance === 'near'
   const deliveryFee = isFreeOngkir ? 0 : activeDistanceSlot.value
 
+  // Filter batches dynamically based on operational hours (on Fridays we open late at 13:30, so hide Batch 1 & 2)
+  const isFriday = new Date().getDay() === 5
+  const visibleBatches = batches.filter(b => {
+    if (isFriday) {
+      return b.id !== 'batch-1' && b.id !== 'batch-2'
+    }
+    return true
+  })
+
   // Find first batch that is not full
-  const availableBatch = batches.find(b => getRemainingQuota(b.id) > 0)
-  const [selectedTime, setSelectedTime] = useState(availableBatch?.id || 'batch-1')
+  const availableBatch = visibleBatches.find(b => getRemainingQuota(b.id) > 0)
+  const [selectedTime, setSelectedTime] = useState(availableBatch?.id || visibleBatches[0]?.id || 'batch-3')
 
   // Auto-switch selected batch if it becomes full in real-time
   useEffect(() => {
     if (selectedTime) {
       const remaining = getRemainingQuota(selectedTime)
       if (remaining === 0) {
-        const firstAvailable = batches.find(b => getRemainingQuota(b.id) > 0)
+        const firstAvailable = visibleBatches.find(b => getRemainingQuota(b.id) > 0)
         if (firstAvailable) {
           setSelectedTime(firstAvailable.id)
         }
       }
     }
-  }, [batches, orders, selectedTime, getRemainingQuota])
+  }, [visibleBatches, orders, selectedTime, getRemainingQuota])
 
   // Real-time cross-tab synchronization & force re-render
   const [syncTick, setSyncTick] = useState(0)
@@ -268,7 +277,7 @@ export default function Checkout() {
   const onSubmit = (data: FormData) => {
     const remaining = getRemainingQuota(selectedTime)
     if (remaining <= 0) {
-      const anyAvailable = batches.some(b => getRemainingQuota(b.id) > 0)
+      const anyAvailable = visibleBatches.some(b => getRemainingQuota(b.id) > 0)
       if (anyAvailable) {
         toast.error('Maaf, slot pengiriman untuk batch ini sudah penuh. Silakan pilih batch lain!')
       } else {
@@ -658,7 +667,7 @@ export default function Checkout() {
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            {batches.map((batch) => {
+            {visibleBatches.map((batch) => {
               const remaining = getRemainingQuota(batch.id)
               const isFull = remaining === 0
               const isActive = selectedTime === batch.id

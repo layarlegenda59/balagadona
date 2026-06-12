@@ -27,8 +27,10 @@ export default function Footer() {
             <h4 className="font-bold text-white mb-2 uppercase tracking-wider text-[10px]">
               Jam Operasional
             </h4>
-            <p className="text-gray-400">Senin - Minggu</p>
+            <p className="text-gray-400 text-[10px]">Senin - Minggu (Kecuali Jumat)</p>
             <p className="text-[#F9A825] font-semibold">10.00 - 21.00 WIB</p>
+            <p className="text-gray-400 text-[10px] mt-1">Khusus Hari Jumat</p>
+            <p className="text-[#F9A825] font-semibold">13.30 - 21.00 WIB</p>
           </div>
           <div>
             <h4 className="font-bold text-white mb-2 uppercase tracking-wider text-[10px]">
