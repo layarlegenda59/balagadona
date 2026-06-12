@@ -77,27 +77,32 @@ function AppInner() {
       </AnimatePresence>
 
       <Toaster position="top-center" richColors />
-      <div className="min-h-screen bg-white flex flex-col">
-        <Navbar />
-        <div className="flex-1 relative overflow-hidden flex flex-col">
-          <AnimatePresence mode="wait">
-            <Routes location={location} key={location.pathname}>
-              <Route path="/" element={<PageTransition><Home /></PageTransition>} />
-              <Route path="/menu" element={<PageTransition><Menu /></PageTransition>} />
-              <Route path="/cart" element={<PageTransition><Cart /></PageTransition>} />
-              <Route path="/checkout" element={<PageTransition><Checkout /></PageTransition>} />
-              <Route path="/order-confirmation" element={<PageTransition><OrderConfirmation /></PageTransition>} />
-              <Route path="/admin" element={<PageTransition><AdminDashboard /></PageTransition>} />
-              <Route path="/courier" element={<PageTransition><CourierDashboard /></PageTransition>} />
-              <Route path="*" element={<PageTransition><NotFound /></PageTransition>} />
-            </Routes>
-          </AnimatePresence>
-        </div>
+      {(() => {
+        const isPortal = location.pathname.startsWith('/admin') || location.pathname.startsWith('/courier')
+        return (
+          <div className="min-h-screen bg-white flex flex-col">
+            {!isPortal && <Navbar />}
+            <div className="flex-1 relative overflow-hidden flex flex-col">
+              <AnimatePresence mode="wait">
+                <Routes location={location} key={location.pathname}>
+                  <Route path="/" element={<PageTransition><Home /></PageTransition>} />
+                  <Route path="/menu" element={<PageTransition><Menu /></PageTransition>} />
+                  <Route path="/cart" element={<PageTransition><Cart /></PageTransition>} />
+                  <Route path="/checkout" element={<PageTransition><Checkout /></PageTransition>} />
+                  <Route path="/order-confirmation" element={<PageTransition><OrderConfirmation /></PageTransition>} />
+                  <Route path="/admin" element={<PageTransition><AdminDashboard /></PageTransition>} />
+                  <Route path="/courier" element={<PageTransition><CourierDashboard /></PageTransition>} />
+                  <Route path="*" element={<PageTransition><NotFound /></PageTransition>} />
+                </Routes>
+              </AnimatePresence>
+            </div>
 
-        <Footer />
-        <BottomNav />
-        <WhatsAppButton />
-      </div>
+            {!isPortal && <Footer />}
+            {!isPortal && <BottomNav />}
+            {!isPortal && <WhatsAppButton />}
+          </div>
+        )
+      })()}
     </>
   )
 }

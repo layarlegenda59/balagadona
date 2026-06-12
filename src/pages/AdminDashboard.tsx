@@ -364,7 +364,7 @@ export default function AdminDashboard() {
   }
 
   return (
-    <main className="max-w-md mx-auto px-4 pb-36 pt-6 animate-fade-in text-[#1F2937]">
+    <main className="w-full max-w-md mx-auto px-4 pb-36 pt-6 animate-fade-in text-[#1F2937]">
       {/* Header */}
       <div className="flex items-center gap-3 mb-5">
         <Link
@@ -397,10 +397,10 @@ export default function AdminDashboard() {
       </div>
 
       {/* Tabs */}
-      <div className="flex bg-gray-100 p-1 rounded-xl mb-5 text-xs font-bold">
+      <div className="flex bg-gray-100 p-1 rounded-xl mb-5 text-xs font-bold overflow-x-auto scrollbar-hide whitespace-nowrap">
         <button
           onClick={() => setActiveTab('overview')}
-          className={`flex-1 py-2 rounded-lg transition-all ${
+          className={`flex-1 flex-shrink-0 min-w-[110px] py-2 px-3 rounded-lg transition-all ${
             activeTab === 'overview' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-800'
           }`}
         >
@@ -408,7 +408,7 @@ export default function AdminDashboard() {
         </button>
         <button
           onClick={() => setActiveTab('batches')}
-          className={`flex-1 py-2 rounded-lg transition-all ${
+          className={`flex-1 flex-shrink-0 min-w-[110px] py-2 px-3 rounded-lg transition-all ${
             activeTab === 'batches' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-800'
           }`}
         >
@@ -416,7 +416,7 @@ export default function AdminDashboard() {
         </button>
         <button
           onClick={() => setActiveTab('quotas')}
-          className={`flex-1 py-2 rounded-lg transition-all ${
+          className={`flex-1 flex-shrink-0 min-w-[110px] py-2 px-3 rounded-lg transition-all ${
             activeTab === 'quotas' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-800'
           }`}
         >
