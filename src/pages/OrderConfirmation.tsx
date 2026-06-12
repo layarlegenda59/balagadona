@@ -6,6 +6,7 @@ import { useDeliveryStore } from '../stores/deliveryStore'
 import { toast } from 'sonner'
 import { motion, AnimatePresence } from 'framer-motion'
 import logoImage from '../assets/Logo Balagadona_fix.png'
+import { supabase } from '../lib/supabase'
 
 export default function OrderConfirmation() {
 
@@ -70,11 +71,27 @@ export default function OrderConfirmation() {
     }
   }
 
-  const handleReviewSubmit = () => {
+  const handleReviewSubmit = async () => {
     if (rating === 0) {
       toast.error('Pilih jumlah bintang terlebih dahulu!')
       return
     }
+
+    const customerName = order?.customer?.name || 'Pelanggan'
+
+    try {
+      await supabase.from('reviews').insert([
+        {
+          name: customerName,
+          rating: rating,
+          tags: selectedTags,
+          comment: reviewComment,
+        }
+      ])
+    } catch (err) {
+      console.error('Failed to submit review to Supabase:', err)
+    }
+
     setReviewSubmitted(true)
     toast.success('Ulasan Anda berhasil dikirim! Terima kasih.')
   }

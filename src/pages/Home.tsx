@@ -1,4 +1,4 @@
-import React, { useRef } from 'react'
+import React, { useRef, useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { ChevronRight, Truck, ShieldCheck, Zap, Leaf, ChevronLeft, Download, Bike } from 'lucide-react'
 import heroImage from '../assets/hero-batagor.jpg'
@@ -9,11 +9,88 @@ import PromoBanner from '../components/features/PromoBanner'
 import { useInstallPrompt } from '../hooks/useInstallPrompt'
 import { useDeliveryStore } from '../stores/deliveryStore'
 import { toast } from 'sonner'
+import { supabase } from '../lib/supabase'
 
 
 export default function Home() {
   const bestSellers = PRODUCTS.filter((p) => p.isBestSeller)
   const testimonialsRef = useRef<HTMLDivElement>(null)
+
+  // Real-time testimonials syncing (initially fallback to static constants)
+  const [dynamicTestimonials, setDynamicTestimonials] = useState<any[]>(TESTIMONIALS)
+
+  useEffect(() => {
+    const fetchLatestReviews = async () => {
+      try {
+        const { data: dbReviews, error } = await supabase
+          .from('reviews')
+          .select('*')
+          .order('createdAt', { ascending: false })
+          .limit(3)
+
+        if (!error && dbReviews) {
+          updateTestimonialsList(dbReviews)
+        }
+      } catch (err) {
+        console.error('Failed to fetch reviews from Supabase:', err)
+      }
+    }
+
+    const updateTestimonialsList = (reviews: any[]) => {
+      const mapped = reviews.map((r: any) => {
+        let text = ''
+        if (r.tags && Array.isArray(r.tags) && r.tags.length > 0) {
+          text += `"${r.tags.join(', ')}". `
+        }
+        if (r.comment) {
+          text += r.comment
+        }
+        if (!text) {
+          text = 'Rasa mantap dan pelayanan memuaskan!'
+        }
+
+        const initials = r.name
+          ? r.name
+              .split(' ')
+              .map((n: string) => n[0])
+              .slice(0, 2)
+              .join('')
+              .toUpperCase()
+          : 'PL'
+
+        return {
+          id: `review-${r.id}`,
+          name: r.name || 'Pelanggan',
+          location: 'Cimahi',
+          rating: r.rating,
+          text: text,
+          avatar: initials,
+        }
+      })
+
+      const combined = [...mapped]
+      if (combined.length < 3) {
+        const needed = 3 - combined.length
+        const fill = TESTIMONIALS.slice(0, needed)
+        combined.push(...fill)
+      }
+      setDynamicTestimonials(combined)
+    }
+
+    fetchLatestReviews()
+
+    // Subscribe to real-time reviews changes to update homepage dynamically
+    const channel = supabase
+      .channel('reviews-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'reviews' }, () => {
+        fetchLatestReviews()
+      })
+      .subscribe()
+
+    return () => {
+      channel.unsubscribe()
+    }
+  }, [])
 
   const scrollTestimonials = (direction: 'left' | 'right') => {
     if (testimonialsRef.current) {
@@ -245,7 +322,7 @@ export default function Home() {
           role="region"
           aria-label="Daftar testimonial pelanggan"
         >
-          {TESTIMONIALS.map((t) => (
+          {dynamicTestimonials.map((t) => (
             <TestimonialCard
               key={t.id}
               name={t.name}

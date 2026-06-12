@@ -25,7 +25,46 @@ function AppInner() {
 
   // Initialize Supabase sync and real-time listeners on mount
   useEffect(() => {
-    useDeliveryStore.getState().initializeSupabaseSync()
+    const store = useDeliveryStore.getState()
+    store.initializeSupabaseSync()
+
+    let wakeLock: any = null
+    const requestLock = async () => {
+      try {
+        if ('wakeLock' in navigator) {
+          wakeLock = await (navigator as any).wakeLock.request('screen')
+        }
+      } catch (err) {
+        console.warn('Wake Lock request failed:', err)
+      }
+    }
+
+    requestLock()
+
+    // Re-acquire lock, re-sync Supabase state, and resume audio context when visibility changes
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        requestLock()
+        // Re-sync Supabase immediately when phone is unlocked / brought back from background
+        store.initializeSupabaseSync()
+        // Resume AudioContext if suspended
+        const AudioContext = window.AudioContext || (window as any).webkitAudioContext
+        if (AudioContext) {
+          const ctx = new AudioContext()
+          if (ctx.state === 'suspended') {
+            ctx.resume()
+          }
+        }
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+      if (wakeLock) {
+        wakeLock.release().catch((e: any) => console.log(e))
+      }
+    }
   }, [])
 
 
