@@ -1,5 +1,4 @@
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
 import { OrderData, DeliveryBatch } from '../types'
 import { supabase } from '../lib/supabase'
 
@@ -17,7 +16,7 @@ interface DeliveryStore {
   deleteBatch: (batchId: string) => Promise<void>
   updateBatch: (batchId: string, name: string, timeRange: string, maxQuota: number) => Promise<void>
   deleteOrder: (orderId: string) => Promise<void>
-  initializeSupabaseSync: () => Promise<void>
+  initializeSupabaseSync: (isPortal?: boolean) => Promise<void>
 }
 
 const DEFAULT_BATCHES: DeliveryBatch[] = [
@@ -67,11 +66,12 @@ const calcDistance = (lat1: number, lng1: number, lat2: number, lng2: number) =>
   return R * c
 }
 
+let isSubscribed = false
+
 export const useDeliveryStore = create<DeliveryStore>()(
-  persist(
-    (set, get) => ({
-      batches: DEFAULT_BATCHES,
-      orders: [],
+  (set, get) => ({
+    batches: DEFAULT_BATCHES,
+    orders: [],
 
       updateBatchQuota: async (batchId, maxQuota) => {
         set({
@@ -379,7 +379,11 @@ export const useDeliveryStore = create<DeliveryStore>()(
         }
       },
 
-      initializeSupabaseSync: async () => {
+      initializeSupabaseSync: async (isPortal) => {
+        const activePortal = isPortal !== undefined
+          ? isPortal
+          : (window.location.pathname.startsWith('/admin') || window.location.pathname.startsWith('/courier'))
+
         // 1. Fetch batches
         try {
           const { data: dbBatches, error: bError } = await supabase
@@ -401,72 +405,135 @@ export const useDeliveryStore = create<DeliveryStore>()(
 
         // 2. Fetch orders
         try {
-          const { data: dbOrders, error: oError } = await supabase
-            .from('orders')
-            .select('*')
-          if (!oError && dbOrders) {
-            set({ orders: dbOrders })
-            // Optimize sequences
-            get().batches.forEach(b => get().optimizeBatchSequence(b.id))
+          let dbOrders: OrderData[] = []
+          if (activePortal) {
+            // Portal mode: fetch full order details
+            const { data: fullOrders, error: oError } = await supabase
+              .from('orders')
+              .select('*')
+            if (!oError && fullOrders) {
+              dbOrders = fullOrders
+            }
+          } else {
+            // Customer mode: fetch only id & batchId to count slots securely
+            const { data: skeletons, error: oError } = await supabase
+              .from('orders')
+              .select('id, batchId')
+            
+            // Also retrieve the customer's own last order fully if it exists
+            const lastOrderSaved = localStorage.getItem('lastOrder')
+            let ownOrder: any = null
+            if (lastOrderSaved) {
+              const lastOrderObj = JSON.parse(lastOrderSaved)
+              if (lastOrderObj?.id) {
+                const { data: ownData } = await supabase
+                  .from('orders')
+                  .select('*')
+                  .eq('id', lastOrderObj.id)
+                  .maybeSingle()
+                if (ownData) ownOrder = ownData
+              }
+            }
+
+            if (!oError && skeletons) {
+              dbOrders = skeletons.map((s: any) => {
+                if (ownOrder && s.id === ownOrder.id) {
+                  return ownOrder
+                }
+                return s as OrderData
+              })
+              // Ensure customer's own order is in the list
+              if (ownOrder && !dbOrders.some(o => o.id === ownOrder.id)) {
+                dbOrders.push(ownOrder)
+              }
+            }
           }
+
+          set({ orders: dbOrders })
+          // Optimize sequences
+          get().batches.forEach(b => get().optimizeBatchSequence(b.id))
         } catch (err) {
           console.error('Failed to fetch orders from Supabase:', err)
         }
 
         // 3. Subscribe to real-time order replication
-        supabase
-          .channel('orders-realtime')
-          .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, (payload) => {
-            const { eventType, new: newRecord, old: oldRecord } = payload
-            if (eventType === 'INSERT') {
-              set((state) => {
-                if (state.orders.some(o => o.id === newRecord.id)) return state
-                const updated = [...state.orders, newRecord as OrderData]
-                return { orders: updated }
-              })
-              if (newRecord.batchId) get().optimizeBatchSequence(newRecord.batchId)
-            } else if (eventType === 'UPDATE') {
-              set((state) => {
-                const updated = state.orders.map(o => o.id === newRecord.id ? { ...o, ...newRecord } : o)
-                return { orders: updated }
-              })
-              if (newRecord.batchId) get().optimizeBatchSequence(newRecord.batchId)
-            } else if (eventType === 'DELETE') {
-              set((state) => {
-                const updated = state.orders.filter(o => o.id !== oldRecord.id)
-                return { orders: updated }
-              })
-            }
-          })
-          .subscribe()
+        if (!isSubscribed) {
+          isSubscribed = true
 
-        // 4. Subscribe to real-time batch replication
-        supabase
-          .channel('batches-realtime')
-          .on('postgres_changes', { event: '*', schema: 'public', table: 'batches' }, (payload) => {
-            const { eventType, new: newRecord, old: oldRecord } = payload
-            if (eventType === 'INSERT') {
-              set((state) => {
-                if (state.batches.some(b => b.id === newRecord.id)) return state
-                return { batches: [...state.batches, newRecord as DeliveryBatch] }
-              })
-            } else if (eventType === 'UPDATE') {
-              set((state) => {
-                const updated = state.batches.map(b => b.id === newRecord.id ? { ...b, ...newRecord } : b)
-                return { batches: updated }
-              })
-            } else if (eventType === 'DELETE') {
-              set((state) => ({
-                batches: state.batches.filter(b => b.id !== oldRecord.id),
-                orders: state.orders.filter(o => o.batchId !== oldRecord.id),
-              }))
-            }
-          })
-          .subscribe()
+          supabase
+            .channel('orders-realtime')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, (payload) => {
+              const { eventType, new: newRecord, old: oldRecord } = payload
+              const isPortalActive = window.location.pathname.startsWith('/admin') || window.location.pathname.startsWith('/courier')
+              
+              const lastOrderSaved = localStorage.getItem('lastOrder')
+              const lastOrderObj = lastOrderSaved ? JSON.parse(lastOrderSaved) : null
+              const isOwnOrder = (id: string) => lastOrderObj?.id === id
+
+              if (eventType === 'INSERT') {
+                set((state) => {
+                  if (state.orders.some(o => o.id === newRecord.id)) return state
+                  let recordToAdd = newRecord as OrderData
+                  if (!isPortalActive && !isOwnOrder(newRecord.id)) {
+                    // Strip details for other customers' orders in customer mode
+                    recordToAdd = {
+                      id: newRecord.id,
+                      batchId: newRecord.batchId,
+                    } as any
+                  }
+                  const updated = [...state.orders, recordToAdd]
+                  return { orders: updated }
+                })
+                if (newRecord.batchId) get().optimizeBatchSequence(newRecord.batchId)
+              } else if (eventType === 'UPDATE') {
+                set((state) => {
+                  const updated = state.orders.map(o => {
+                    if (o.id === newRecord.id) {
+                      if (isPortalActive || isOwnOrder(newRecord.id)) {
+                        return { ...o, ...newRecord }
+                      } else {
+                        // Strip details
+                        return { id: newRecord.id, batchId: newRecord.batchId } as any
+                      }
+                    }
+                    return o
+                  })
+                  return { orders: updated }
+                })
+                if (newRecord.batchId) get().optimizeBatchSequence(newRecord.batchId)
+              } else if (eventType === 'DELETE') {
+                set((state) => {
+                  const updated = state.orders.filter(o => o.id !== oldRecord.id)
+                  return { orders: updated }
+                })
+              }
+            })
+            .subscribe()
+
+          // 4. Subscribe to real-time batch replication
+          supabase
+            .channel('batches-realtime')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'batches' }, (payload) => {
+              const { eventType, new: newRecord, old: oldRecord } = payload
+              if (eventType === 'INSERT') {
+                set((state) => {
+                  if (state.batches.some(b => b.id === newRecord.id)) return state
+                  return { batches: [...state.batches, newRecord as DeliveryBatch] }
+                })
+              } else if (eventType === 'UPDATE') {
+                set((state) => {
+                  const updated = state.batches.map(b => b.id === newRecord.id ? { ...b, ...newRecord } : b)
+                  return { batches: updated }
+                })
+              } else if (eventType === 'DELETE') {
+                set((state) => ({
+                  batches: state.batches.filter(b => b.id !== oldRecord.id),
+                  orders: state.orders.filter(o => o.batchId !== oldRecord.id),
+                }))
+              }
+            })
+            .subscribe()
+        }
       }
-    }),
-    {
-      name: 'balagadona-delivery-storage',
-    }
-  )
+    })
 )

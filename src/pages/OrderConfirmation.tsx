@@ -92,6 +92,27 @@ export default function OrderConfirmation() {
       console.error('Failed to submit review to Supabase:', err)
     }
 
+    // Warm, friendly Indonesian voice assistant thank-you greeting
+    if ('speechSynthesis' in window) {
+      let speechText = ''
+      if (rating >= 4) {
+        speechText = `Terima kasih banyak atas ulasan bintang ${rating} nya! Kami sangat senang Anda menyukai Batagor Balagadona hangat kami. Ditunggu pesanan berikutnya, ya!`
+      } else {
+        speechText = `Terima kasih banyak atas masukan Anda. Kami memohon maaf jika ada kekurangan, masukan Anda sangat berharga bagi kami untuk meningkatkan kualitas pelayanan.`
+      }
+      
+      try {
+        window.speechSynthesis.cancel() // Cancel any pending utterances
+        const utterance = new SpeechSynthesisUtterance(speechText)
+        utterance.lang = 'id-ID'
+        utterance.rate = 1.05
+        utterance.pitch = 1.1
+        window.speechSynthesis.speak(utterance)
+      } catch (speechErr) {
+        console.warn('Speech synthesis failed to play:', speechErr)
+      }
+    }
+
     setReviewSubmitted(true)
     toast.success('Ulasan Anda berhasil dikirim! Terima kasih.')
   }

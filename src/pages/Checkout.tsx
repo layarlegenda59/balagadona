@@ -80,26 +80,7 @@ export default function Checkout() {
     }
   }, [visibleBatches, orders, selectedTime, getRemainingQuota])
 
-  // Real-time cross-tab synchronization & force re-render
-  const [syncTick, setSyncTick] = useState(0)
-  useEffect(() => {
-    const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === 'balagadona-delivery-storage' && e.newValue) {
-        try {
-          const parsed = JSON.parse(e.newValue)
-          if (parsed && parsed.state) {
-            // Directly and synchronously update the store state with the new values
-            useDeliveryStore.setState(parsed.state)
-            setSyncTick((t) => t + 1)
-          }
-        } catch (err) {
-          console.error('Failed to sync storage:', err)
-        }
-      }
-    }
-    window.addEventListener('storage', handleStorageChange)
-    return () => window.removeEventListener('storage', handleStorageChange)
-  }, [])
+
 
   const [detecting, setDetecting] = useState(false)
   const [errorMsg, setErrorMsg] = useState('')

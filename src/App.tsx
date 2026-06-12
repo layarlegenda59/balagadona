@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom'
 import { Toaster } from 'sonner'
 import { AnimatePresence } from 'framer-motion'
@@ -22,12 +22,40 @@ function AppInner() {
   console.log("AppInner rendering...");
   const [isSplashActive, setIsSplashActive] = useState(true)
   const location = useLocation()
+  const lastSyncModeRef = useRef<boolean | null>(null)
 
-  // Initialize Supabase sync and real-time listeners on mount
+  // Dynamically sync and update document title on route transitions
   useEffect(() => {
     const store = useDeliveryStore.getState()
-    store.initializeSupabaseSync()
+    const isPortal = location.pathname.startsWith('/admin') || location.pathname.startsWith('/courier')
+    
+    // Only re-sync when crossing the portal/customer boundary
+    if (lastSyncModeRef.current !== isPortal) {
+      lastSyncModeRef.current = isPortal
+      store.initializeSupabaseSync(isPortal)
+    }
 
+    // Set document tab titles
+    if (location.pathname.startsWith('/admin')) {
+      document.title = 'Dashboard Admin - Balagadona'
+    } else if (location.pathname.startsWith('/courier')) {
+      document.title = 'Dashboard Kurir - Balagadona'
+    } else if (location.pathname === '/checkout') {
+      document.title = 'Checkout - Balagadona'
+    } else if (location.pathname === '/menu') {
+      document.title = 'Menu Terlezat - Balagadona'
+    } else if (location.pathname === '/cart') {
+      document.title = 'Keranjang Belanja - Balagadona'
+    } else if (location.pathname === '/order-confirmation') {
+      document.title = 'Pesanan Berhasil - Balagadona'
+    } else {
+      document.title = 'Batagor Balagadona - Pelopor Batagor Premium'
+    }
+  }, [location.pathname])
+
+  // Screen wake lock and visibility state restoration
+  useEffect(() => {
+    const store = useDeliveryStore.getState()
     let wakeLock: any = null
     const requestLock = async () => {
       try {
@@ -46,7 +74,8 @@ function AppInner() {
       if (document.visibilityState === 'visible') {
         requestLock()
         // Re-sync Supabase immediately when phone is unlocked / brought back from background
-        store.initializeSupabaseSync()
+        const isPortalActive = window.location.pathname.startsWith('/admin') || window.location.pathname.startsWith('/courier')
+        store.initializeSupabaseSync(isPortalActive)
         // Resume AudioContext if suspended
         const AudioContext = window.AudioContext || (window as any).webkitAudioContext
         if (AudioContext) {

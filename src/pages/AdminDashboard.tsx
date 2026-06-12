@@ -145,7 +145,6 @@ export default function AdminDashboard() {
 
   const [activeTab, setActiveTab] = useState<'overview' | 'batches' | 'quotas'>('overview')
 
-  const [syncTick, setSyncTick] = useState(0)
   const [isAudioEnabled, setIsAudioEnabled] = useState(() => {
     const saved = localStorage.getItem('admin-audio-enabled')
     return saved !== 'false' // default to true if not set
@@ -225,25 +224,7 @@ export default function AdminDashboard() {
     setPrevOrders(orders)
   }, [orders, prevOrders, isAudioEnabled])
 
-  // Real-time cross-tab synchronization & force re-render via syncTick
-  useEffect(() => {
-    const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === 'balagadona-delivery-storage' && e.newValue) {
-        try {
-          const parsed = JSON.parse(e.newValue)
-          if (parsed && parsed.state) {
-            // Directly and synchronously update the store state with the new values
-            useDeliveryStore.setState(parsed.state)
-            setSyncTick((t) => t + 1)
-          }
-        } catch (err) {
-          console.error('Failed to sync storage:', err)
-        }
-      }
-    }
-    window.addEventListener('storage', handleStorageChange)
-    return () => window.removeEventListener('storage', handleStorageChange)
-  }, [])
+
 
   // CRUD Batch States
   const [isAddingBatch, setIsAddingBatch] = useState(false)
@@ -367,13 +348,9 @@ export default function AdminDashboard() {
     <main className="w-full max-w-md mx-auto px-4 pb-36 pt-6 animate-fade-in text-[#1F2937]">
       {/* Header */}
       <div className="flex items-center gap-3 mb-5">
-        <Link
-          to="/"
-          className="w-10 h-10 flex items-center justify-center rounded-xl hover:bg-gray-100 transition-colors"
-          aria-label="Kembali ke Beranda"
-        >
-          <ArrowLeft className="w-5 h-5" />
-        </Link>
+        <div className="w-10 h-10 flex items-center justify-center rounded-xl bg-red-50">
+          <Settings className="w-5 h-5 text-[#C62828]" />
+        </div>
         <div>
           <h1 className="font-display font-bold text-xl text-gray-800">Dashboard Admin</h1>
           <p className="text-gray-500 text-xs">Balagadona Delivery Management</p>

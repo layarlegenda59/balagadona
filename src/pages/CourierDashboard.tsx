@@ -91,13 +91,9 @@ export default function CourierDashboard() {
     <main className="max-w-md mx-auto px-4 pb-28 pt-4 animate-fade-in text-[#1F2937] bg-gray-50 min-h-screen">
       {/* Header */}
       <div className="flex items-center gap-3 mb-4">
-        <Link
-          to="/"
-          className="w-9 h-9 flex items-center justify-center rounded-xl hover:bg-gray-200 bg-white shadow-sm border border-gray-100 transition-colors"
-          aria-label="Kembali ke Beranda"
-        >
-          <ArrowLeft className="w-4 h-4 text-gray-700" />
-        </Link>
+        <div className="w-9 h-9 flex items-center justify-center rounded-xl bg-[#C62828] text-white shadow-sm">
+          <Bike className="w-4 h-4" />
+        </div>
         <div>
           <h1 className="font-display font-bold text-lg text-gray-800 leading-tight">Dashboard Kurir</h1>
           <p className="text-gray-500 text-[10px]">Jadwal & Urutan Pengiriman</p>
