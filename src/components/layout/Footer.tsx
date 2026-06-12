@@ -1,4 +1,5 @@
 import { Compass, Mail, PhoneCall } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import { WHATSAPP_NUMBER } from '../../constants/products'
 import logoImage from '../../assets/Logo Balagadona_fix.png'
 
@@ -51,7 +52,9 @@ export default function Footer() {
 
         {/* Copyright */}
         <div className="flex flex-col sm:flex-row items-center justify-between gap-2 text-[10px] text-gray-500">
-          <p>© {currentYear} Batagor Balagadona. All rights reserved.</p>
+          <div className="flex flex-col gap-1 items-center sm:items-start">
+            <p>© {currentYear} Batagor Balagadona. All rights reserved.</p>
+          </div>
           <div className="flex gap-3">
             <span className="hover:text-gray-400 transition-colors cursor-pointer">Syarat & Ketentuan</span>
             <span>•</span>
@@ -62,3 +65,4 @@ export default function Footer() {
     </footer>
   )
 }
+

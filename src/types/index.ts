@@ -33,4 +33,15 @@ export interface OrderData {
   deliveryDistance: string
   total: number
   createdAt: string
+  batchId?: string
+  status?: 'pending' | 'preparing' | 'ready' | 'delivering' | 'delivered'
+  sequence?: number
 }
+
+export interface DeliveryBatch {
+  id: string
+  name: string
+  timeRange: string
+  maxQuota: number
+}
+

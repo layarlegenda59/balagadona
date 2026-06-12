@@ -8,10 +8,10 @@ interface SplashScreenProps {
 
 export default function SplashScreen({ onComplete }: SplashScreenProps) {
   useEffect(() => {
-    // Show splash screen for 1200ms before triggering onComplete
+    // Show splash screen for 2300ms before triggering onComplete
     const timer = setTimeout(() => {
       onComplete()
-    }, 1300)
+    }, 2300)
 
     return () => clearTimeout(timer)
   }, [onComplete])
@@ -33,8 +33,8 @@ export default function SplashScreen({ onComplete }: SplashScreenProps) {
           src={logoImage}
           alt="Logo Balagadona"
           initial={{ opacity: 0, scale: 0.7, rotateY: 0 }}
-          animate={{ opacity: 1, scale: 1, rotateY: 360 }}
-          transition={{ duration: 1.1, ease: [0.16, 1, 0.3, 1] }}
+          animate={{ opacity: 1, scale: 1, rotateY: 1080 }}
+          transition={{ duration: 2.0, ease: [0.16, 1, 0.3, 1] }}
           className="w-32 h-32 object-contain filter drop-shadow-md"
           style={{ backfaceVisibility: 'hidden' }}
         />

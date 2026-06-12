@@ -18,7 +18,7 @@ export interface Product {
 export const PRODUCTS: Product[] = [
   {
     id: 'batagor-original',
-    name: 'Batagor Original',
+    name: 'Batagor Kering Bumbu Kacang',
     description: 'Batagor ikan segar dengan saus kacang spesial, renyah di luar lembut di dalam.',
     price: 15000,
     image: batagorOriginal,
@@ -84,7 +84,7 @@ export const WHY_CHOOSE_US = [
   {
     icon: '💯',
     title: 'Jaminan Kualitas',
-    desc: 'Puas atau uang kembali, tanpa syarat.',
+    desc: 'Rasa lezat terjamin dengan kualitas bahan premium.',
   },
 ]
 

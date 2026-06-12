@@ -9,8 +9,8 @@ import { useInstallPrompt } from '../hooks/useInstallPrompt'
 
 const CATEGORIES = [
   { id: 'all', label: 'Semua' },
-  { id: 'original', label: 'Original' },
-  { id: 'kuah', label: 'Kuah' },
+  { id: 'original', label: 'Batagor Kering' },
+  { id: 'kuah', label: 'Batagor Kuah' },
 ]
 
 export default function Menu() {

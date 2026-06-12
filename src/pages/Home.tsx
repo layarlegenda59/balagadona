@@ -1,11 +1,15 @@
 import React, { useRef } from 'react'
 import { Link } from 'react-router-dom'
-import { ChevronRight, Truck, ShieldCheck, Zap, Leaf, ChevronLeft } from 'lucide-react'
+import { ChevronRight, Truck, ShieldCheck, Zap, Leaf, ChevronLeft, Download, Bike } from 'lucide-react'
 import heroImage from '../assets/hero-batagor.jpg'
 import { PRODUCTS, TESTIMONIALS, WHY_CHOOSE_US } from '../constants/products'
 import ProductCard from '../components/features/ProductCard'
 import TestimonialCard from '../components/features/TestimonialCard'
 import PromoBanner from '../components/features/PromoBanner'
+import { useInstallPrompt } from '../hooks/useInstallPrompt'
+import { useDeliveryStore } from '../stores/deliveryStore'
+import { toast } from 'sonner'
+
 
 export default function Home() {
   const bestSellers = PRODUCTS.filter((p) => p.isBestSeller)
@@ -29,8 +33,67 @@ export default function Home() {
     }
   }
 
+  const { isInstallable, isIOS, triggerInstall } = useInstallPrompt()
+
+  const handleInstallClick = () => {
+    if (isInstallable) {
+      triggerInstall()
+    } else if (isIOS) {
+      toast.info('Install Aplikasi: Ketuk tombol "Bagikan" di bagian bawah Safari, lalu gulir ke bawah dan pilih "Tambahkan ke Layar Utama" 📲', {
+        duration: 10000
+      })
+    } else {
+      toast.info('Buka menu browser Anda (ikon titik tiga di kanan atas) lalu pilih "Install Aplikasi" atau "Tambahkan ke Layar Utama" 📲', {
+        duration: 6000
+      })
+    }
+  }
+
+  // Check if there is an active order in delivery store
+  const storeOrders = useDeliveryStore((s) => s.orders)
+  const lastOrderSaved = localStorage.getItem('lastOrder')
+  const lastOrderObj = lastOrderSaved ? JSON.parse(lastOrderSaved) : null
+  const activeOrder = lastOrderObj ? storeOrders.find(o => o.id === lastOrderObj.id) : null
+  const isOrderActive = activeOrder && activeOrder.status !== 'delivered'
+
   return (
-    <main className="max-w-md mx-auto pb-24 sm:pb-8">
+    <main className="w-full max-w-md mx-auto pb-24 sm:pb-8 overflow-x-hidden">
+      {/* Active Order Tracker Banner */}
+      {isOrderActive && (
+        <div className="px-4 pt-4">
+          <Link
+            to="/order-confirmation"
+            className="flex items-center justify-between bg-gradient-to-r from-[#C62828] to-red-600 text-white p-3.5 rounded-2xl shadow-md hover:shadow-lg transition-all active:scale-95"
+          >
+            <div className="flex items-center gap-2.5 min-w-0">
+              <span className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center shrink-0 text-base">
+                🛵
+              </span>
+              <div className="text-left min-w-0">
+                <span className="text-[9px] text-red-100 font-bold uppercase tracking-wider block">
+                  Pesanan Aktif Sedang Diproses
+                </span>
+                <span className="text-xs font-bold truncate block">
+                  Status: {
+                    activeOrder.status === 'pending'
+                      ? 'Menunggu Konfirmasi'
+                      : activeOrder.status === 'preparing'
+                      ? 'Dapur (Sedang Dimasak)'
+                      : activeOrder.status === 'ready'
+                      ? 'Siap Diantar'
+                      : 'Dalam Pengantaran (Kurir Jalan)'
+                  }
+                </span>
+              </div>
+            </div>
+            <div className="flex items-center gap-1 text-[11px] font-bold shrink-0 bg-white/25 px-2.5 py-1.5 rounded-xl">
+              <span>Lacak</span>
+              <ChevronRight className="w-3.5 h-3.5" />
+            </div>
+          </Link>
+        </div>
+      )}
+
       {/* ── HERO ── */}
       <section className="relative overflow-hidden">
         <div className="relative h-[300px] sm:h-[360px]">
@@ -54,11 +117,11 @@ export default function Home() {
             <p className="text-gray-200 text-sm mb-4 leading-relaxed">
               Pesan Batagor favorit Anda hanya dalam beberapa detik.
             </p>
-            <div className="flex gap-3">
-              <Link to="/menu" className="btn-primary flex-1 text-center text-sm py-2.5">
+            <div className="flex gap-2.5">
+              <Link to="/menu" className="btn-primary flex-1 text-center text-xs sm:text-sm py-2.5 px-2">
                 Pesan Sekarang
               </Link>
-              <Link to="/menu" className="border border-white text-white bg-transparent hover:bg-white hover:text-[#C62828] flex-1 text-center text-sm py-2.5 rounded-xl transition-all font-semibold flex items-center justify-center">
+              <Link to="/menu" className="border border-white text-white bg-transparent hover:bg-white hover:text-[#C62828] flex-1 text-center text-xs sm:text-sm py-2.5 px-2 rounded-xl transition-all font-semibold flex items-center justify-center">
                 Lihat Menu
               </Link>
             </div>
@@ -67,20 +130,20 @@ export default function Home() {
       </section>
 
       {/* ── DELIVERY INFO BAR ── */}
-      <section className="bg-[#C62828] px-4 py-3">
-        <div className="flex items-center justify-center gap-6 text-white text-xs font-semibold">
-          <div className="flex items-center gap-1.5">
-            <Truck className="w-4 h-4" />
+      <section className="bg-[#C62828] px-2 py-3">
+        <div className="flex items-center justify-center gap-2 sm:gap-6 text-white text-[10px] sm:text-xs font-semibold">
+          <div className="flex items-center gap-1">
+            <Truck className="w-3.5 h-3.5" />
             <span>Antar Cepat</span>
           </div>
-          <div className="w-px h-4 bg-white/30" />
-          <div className="flex items-center gap-1.5">
-            <ShieldCheck className="w-4 h-4" />
+          <div className="w-px h-3 bg-white/30" />
+          <div className="flex items-center gap-1">
+            <ShieldCheck className="w-3.5 h-3.5" />
             <span>Terjamin Segar</span>
           </div>
-          <div className="w-px h-4 bg-white/30" />
-          <div className="flex items-center gap-1.5">
-            <Zap className="w-4 h-4" />
+          <div className="w-px h-3 bg-white/30" />
+          <div className="flex items-center gap-1">
+            <Zap className="w-3.5 h-3.5" />
             <span>Pesan via WA</span>
           </div>
         </div>
@@ -120,7 +183,7 @@ export default function Home() {
             { step: '2', emoji: '📍', title: 'Isi Alamat', desc: 'Isi data kirim & bagikan lokasi' },
             { step: '3', emoji: '🛵', title: 'Nikmati!', desc: 'Pesanan diantar hangat & lezat' }
           ].map((item, idx) => (
-            <div key={idx} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-3 flex flex-col items-center text-center relative hover:shadow-md transition-shadow">
+            <div key={idx} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-2 sm:p-3 flex flex-col items-center text-center relative hover:shadow-md transition-shadow">
               <div className="w-10 h-10 rounded-full bg-red-50 flex items-center justify-center text-xl mb-2 relative">
                 {item.emoji}
                 <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-[#C62828] text-white text-[9px] font-bold flex items-center justify-center">
@@ -198,20 +261,61 @@ export default function Home() {
       {/* ── DELIVERY INFO ── */}
       <section className="mx-4 mt-8 bg-gradient-to-br from-[#C62828] to-[#8B0000] rounded-2xl p-5 text-white">
         <div className="flex items-start gap-3">
-          <Truck className="w-6 h-6 text-[#F9A825] shrink-0 mt-0.5" />
-          <div>
-            <h3 className="font-display font-bold text-lg mb-1">Informasi Pengiriman</h3>
-            <p className="text-white/80 text-sm leading-relaxed mb-3">
-              Kami melayani pengiriman ke seluruh area kota. Estimasi 30–60 menit setelah pesanan dikonfirmasi.
+          <Truck className="w-5 h-5 text-[#F9A825] shrink-0 mt-0.5" />
+          <div className="w-full">
+            <h3 className="font-display font-bold text-base mb-1">Informasi Pengiriman</h3>
+            <p className="text-white/90 text-xs leading-relaxed mb-3">
+              Kami menggunakan <strong>Sistem Pengiriman Terjadwal (Batch)</strong>. Batagor digoreng dadakan sesaat sebelum kurir berangkat agar tetap hangat, renyah, dan lezat saat tiba di tempat Anda. Jadwal batch lengkap dapat Anda pilih langsung saat checkout.
             </p>
-            <div className="flex flex-wrap gap-2">
-              <span className="badge bg-white/20 text-white">Radius 10 km</span>
-              <span className="badge bg-white/20 text-white">10.00–21.00</span>
-              <span className="badge bg-white/20 text-white">Same Day</span>
+            <div className="flex flex-wrap gap-1.5">
+              <span className="badge bg-white/20 text-white text-[9px] px-2 py-0.5 rounded-full font-semibold">Pengiriman Terjadwal (Batch)</span>
+              <span className="badge bg-white/20 text-white text-[9px] px-2 py-0.5 rounded-full font-semibold">Radius s/d 10 km</span>
             </div>
           </div>
         </div>
       </section>
+
+      {/* ── INSTALL BANNER ── */}
+      <section className="px-4 pt-8">
+        <div className="bg-gradient-to-br from-[#1F2937] to-[#111827] rounded-3xl p-5 text-white shadow-xl relative overflow-hidden border border-gray-800">
+          <div className="absolute -right-12 -bottom-12 w-32 h-32 bg-[#F9A825]/5 rounded-full blur-3xl animate-pulse" />
+          <div className="absolute -left-12 -top-12 w-32 h-32 bg-[#C62828]/5 rounded-full blur-3xl animate-pulse" />
+          
+          <div className="relative space-y-3">
+            <div>
+              <h3 className="font-display font-bold text-base text-white">
+                Install Aplikasi Resmi Balagadona
+              </h3>
+              <p className="text-gray-400 text-xs leading-relaxed mt-1">
+                Pesan batagor hangat jadi lebih mudah, cepat, dan praktis langsung dari layar utama HP Anda.
+              </p>
+            </div>
+
+            {/* Simple Platform-specific Guide */}
+            <div className="bg-white/5 rounded-2xl p-3 text-[10px] text-gray-300 space-y-2 border border-white/5">
+              <div className="flex items-start gap-2">
+                <span className="text-[9px] font-bold text-[#F9A825] bg-[#F9A825]/10 px-1.5 py-0.5 rounded uppercase shrink-0">Android</span>
+                <span className="leading-snug">Cukup ketuk tombol <strong>Install Aplikasi Sekarang</strong> di bawah.</span>
+              </div>
+              <div className="flex items-start gap-2 border-t border-white/5 pt-2">
+                <span className="text-[9px] font-bold text-[#4285F4] bg-[#4285F4]/10 px-1.5 py-0.5 rounded uppercase shrink-0">iPhone</span>
+                <span className="leading-snug">Ketuk tombol <strong>Bagikan (Share)</strong> di Safari, lalu pilih <strong>Tambahkan ke Layar Utama</strong>.</span>
+              </div>
+            </div>
+
+            <div className="flex flex-col items-center gap-2 pt-1 border-t border-gray-800/80">
+              <button
+                onClick={handleInstallClick}
+                className="w-full bg-gradient-to-r from-[#C62828] to-[#EF5350] hover:from-[#b71c1c] hover:to-[#e53935] text-white font-bold text-xs py-2.5 px-6 rounded-2xl transition-all shadow-md flex items-center justify-center gap-1.5 active:scale-95 hover:scale-[1.01]"
+              >
+                <Download className="w-3.5 h-3.5 text-white" />
+                <span>Install Aplikasi Sekarang</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
 
       {/* ── LOKASI KAMI ── */}
       <section className="px-4 pt-8">
@@ -220,7 +324,7 @@ export default function Home() {
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-3 hover:shadow-md transition-shadow overflow-hidden">
           <div className="rounded-xl overflow-hidden aspect-video w-full border border-gray-100">
             <iframe
-              src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3961.129790490574!2d107.55602777499607!3d-6.875048893123725!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x2e68e5569a1a9273%3A0x48ec4a8cd8fe6c37!2sBatagor%20Balagadona!5e0!3m2!1sen!2sid!4v1781137791291!5m2!1sen!2sid"
+              src="https://maps.google.com/maps?q=Jl.%20Kec.%20No.93/101,%20Cibabat,%20Kec.%20Cimahi%20Utara,%20Kota%20Cimahi,%20Jawa%20Barat%2040513&t=&z=17&ie=UTF8&iwloc=&output=embed"
               className="w-full h-full"
               style={{ border: 0 }}
               allowFullScreen={true}
@@ -232,7 +336,7 @@ export default function Home() {
           <div className="pt-3 px-1 flex flex-col gap-1">
             <span className="font-bold text-sm text-[#1F2937]">Batagor Balagadona</span>
             <p className="text-xs text-gray-500 leading-relaxed">
-              Jl. Pojok Utara, Cimahi Tengah, Kota Cimahi, Jawa Barat 40523
+              Jl. Kec. No.93/101, Cibabat, Kec. Cimahi Utara, Kota Cimahi, Jawa Barat 40513
             </p>
           </div>
         </div>

@@ -4,9 +4,13 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { useNavigate, Link } from 'react-router-dom'
 import { ArrowLeft, User, Phone, MapPin, FileText, Clock, Edit2, Trash2, Plus, CheckCircle2 } from 'lucide-react'
+import { useDeliveryStore } from '../stores/deliveryStore'
 import { useCartStore } from '../stores/cartStore'
 import { formatPrice, WHATSAPP_NUMBER } from '../constants/products'
 import { generateReceiptPDF } from '../lib/pdf'
+import { toast } from 'sonner'
+
+const getEmoji = (code: number) => String.fromCodePoint(code)
 
 interface AddressProfile {
   id: string
@@ -15,13 +19,6 @@ interface AddressProfile {
   address: string
 }
 
-const TIME_SLOTS = [
-  { id: 'soon', label: 'Secepatnya', value: 'Secepatnya' },
-  { id: '30min', label: '30 menit', value: '30 menit' },
-  { id: '1hour', label: '1 jam', value: '1 jam' },
-  { id: '1.5hour', label: '1.5 jam', value: '1.5 jam' },
-  { id: '2hour', label: '2 jam', value: '2 jam' },
-]
 
 const DISTANCE_SLOTS = [
   { id: 'near', label: 's/d 3 km', value: 5000 },
@@ -49,14 +46,52 @@ export default function Checkout() {
   const { items, cartNotes, totalPrice, clearCart, totalItems } = useCartStore()
   const price = totalPrice()
   const totalPortions = totalItems()
-  
+
+  const { batches, orders, addOrder, getRemainingQuota } = useDeliveryStore()
+
   const [selectedDistance, setSelectedDistance] = useState('near')
   const activeDistanceSlot = DISTANCE_SLOTS.find(d => d.id === selectedDistance) || DISTANCE_SLOTS[0]
   const isFreeOngkir = totalPortions >= 3 && selectedDistance === 'near'
   const deliveryFee = isFreeOngkir ? 0 : activeDistanceSlot.value
 
-  const [selectedTime, setSelectedTime] = useState('soon')
-  
+  // Find first batch that is not full
+  const availableBatch = batches.find(b => getRemainingQuota(b.id) > 0)
+  const [selectedTime, setSelectedTime] = useState(availableBatch?.id || 'batch-1')
+
+  // Auto-switch selected batch if it becomes full in real-time
+  useEffect(() => {
+    if (selectedTime) {
+      const remaining = getRemainingQuota(selectedTime)
+      if (remaining === 0) {
+        const firstAvailable = batches.find(b => getRemainingQuota(b.id) > 0)
+        if (firstAvailable) {
+          setSelectedTime(firstAvailable.id)
+        }
+      }
+    }
+  }, [batches, orders, selectedTime, getRemainingQuota])
+
+  // Real-time cross-tab synchronization & force re-render
+  const [syncTick, setSyncTick] = useState(0)
+  useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'balagadona-delivery-storage' && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue)
+          if (parsed && parsed.state) {
+            // Directly and synchronously update the store state with the new values
+            useDeliveryStore.setState(parsed.state)
+            setSyncTick((t) => t + 1)
+          }
+        } catch (err) {
+          console.error('Failed to sync storage:', err)
+        }
+      }
+    }
+    window.addEventListener('storage', handleStorageChange)
+    return () => window.removeEventListener('storage', handleStorageChange)
+  }, [])
+
   const [detecting, setDetecting] = useState(false)
   const [errorMsg, setErrorMsg] = useState('')
 
@@ -73,7 +108,7 @@ export default function Checkout() {
         const userLng = position.coords.longitude
         const shopLat = -6.875048893123725
         const shopLng = 107.55602777499607
-        
+
         // Haversine formula to calculate straight-line distance
         const R = 6371 // Earth radius in km
         const dLat = ((shopLat - userLat) * Math.PI) / 180
@@ -81,9 +116,9 @@ export default function Checkout() {
         const a =
           Math.sin(dLat / 2) * Math.sin(dLat / 2) +
           Math.cos((userLat * Math.PI) / 180) *
-            Math.cos((shopLat * Math.PI) / 180) *
-            Math.sin(dLng / 2) *
-            Math.sin(dLng / 2)
+          Math.cos((shopLat * Math.PI) / 180) *
+          Math.sin(dLng / 2) *
+          Math.sin(dLng / 2)
         const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
         const distance = R * c
 
@@ -113,10 +148,13 @@ export default function Checkout() {
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null)
   const [isAdding, setIsAdding] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
-  
+
   const [profileName, setProfileName] = useState('')
   const [profilePhone, setProfilePhone] = useState('')
   const [profileAddress, setProfileAddress] = useState('')
+
+  const activeBatchObj = batches.find(b => b.id === selectedTime)
+  const activeBatchText = activeBatchObj ? `${activeBatchObj.name} (${activeBatchObj.timeRange})` : ''
 
   const {
     register,
@@ -125,8 +163,15 @@ export default function Checkout() {
     formState: { errors, isSubmitting },
   } = useForm<FormData>({
     resolver: zodResolver(schema),
-    defaultValues: { notes: cartNotes, deliveryTime: 'soon' },
+    defaultValues: { notes: cartNotes, deliveryTime: activeBatchText },
   })
+
+  // Keep react-hook-form value in sync with selectedTime
+  useEffect(() => {
+    if (activeBatchText) {
+      setValue('deliveryTime', activeBatchText)
+    }
+  }, [selectedTime, activeBatchText, setValue])
 
   // Load saved profiles from localStorage on mount
   useEffect(() => {
@@ -200,7 +245,7 @@ export default function Checkout() {
     const updated = profiles.filter((p) => p.id !== id)
     setProfiles(updated)
     localStorage.setItem('saved-addresses', JSON.stringify(updated))
-    
+
     if (editingId === id) {
       setIsAdding(false)
       setEditingId(null)
@@ -221,32 +266,43 @@ export default function Checkout() {
   }
 
   const onSubmit = (data: FormData) => {
+    const remaining = getRemainingQuota(selectedTime)
+    if (remaining <= 0) {
+      const anyAvailable = batches.some(b => getRemainingQuota(b.id) > 0)
+      if (anyAvailable) {
+        toast.error('Maaf, slot pengiriman untuk batch ini sudah penuh. Silakan pilih batch lain!')
+      } else {
+        toast.error('Maaf, seluruh slot pengiriman untuk hari ini sudah penuh!')
+      }
+      return
+    }
+
     const notesArray = [data.notes, cartNotes].filter(Boolean)
     const allNotes = Array.from(new Set(notesArray)).join(', ')
 
     const message = [
-      '\uD83D\uDCCB *PESANAN BATAGOR BALAGADONA*',
+      `${getEmoji(0x1F4CB)} *PESANAN BATAGOR BALAGADONA*`,
       '===================================',
       '',
       '*DATA PELANGGAN*',
-      `\uD83D\uDC64 Nama: ${data.name}`,
-      `\uD83D\uDCDE No. WhatsApp: ${data.phone}`,
+      `${getEmoji(0x1F464)} Nama: ${data.name}`,
+      `${getEmoji(0x1F4DE)} No. WhatsApp: ${data.phone}`,
       '',
       '*DETAIL PESANAN*',
       items.map(({ product, quantity }) => `- ${product.name} (${quantity}x) : ${formatPrice(product.price * quantity)}`).join('\n'),
       '',
       '*RINGKASAN PEMBAYARAN*',
-      `💰 Subtotal: ${formatPrice(price)}`,
-      `\uD83D\uDEF5 Ongkos Kirim (${activeDistanceSlot.label}): ${isFreeOngkir ? 'Gratis (Promo s/d 3 km)' : formatPrice(deliveryFee)}`,
-      `\uD83D\uDCB0 Total Harga: *${formatPrice(price + deliveryFee)}*`,
-      `\u23F1 Waktu Pengiriman: ${data.deliveryTime}`,
-      allNotes ? `\uD83D\uDCDD Catatan: ${allNotes}` : '',
+      `${getEmoji(0x1F4B0)} Subtotal: ${formatPrice(price)}`,
+      `${getEmoji(0x1F6F5)} Ongkos Kirim (${activeDistanceSlot.label}): ${isFreeOngkir ? 'Gratis (Promo s/d 3 km)' : formatPrice(deliveryFee)}`,
+      `${getEmoji(0x1F4B8)} Total Harga: *${formatPrice(price + deliveryFee)}*`,
+      `${getEmoji(0x23F1)} Waktu Pengiriman: ${data.deliveryTime}`,
+      allNotes ? `${getEmoji(0x1F4DD)} Catatan: ${allNotes}` : '',
       '',
       '*ALAMAT PENGIRIMAN*',
-      `\uD83D\uDCCD Alamat: ${data.address}`,
+      `${getEmoji(0x1F4CC)} Alamat: ${data.address}`,
       '',
       '===================================',
-      'Terima kasih! Pesanan Anda akan segera kami proses. \uD83D\uDE4F',
+      `Terima kasih! Pesanan Anda akan segera kami proses. ${getEmoji(0x1F64F)}`,
     ]
       .filter((line) => line !== undefined)
       .join('\n')
@@ -257,13 +313,19 @@ export default function Checkout() {
     const order = {
       id: `ORD-${Date.now()}`,
       customer: data,
-      items,
+      items: items.map(item => ({
+        product: { name: item.product.name, price: item.product.price },
+        quantity: item.quantity
+      })),
       deliveryFee,
       deliveryDistance: activeDistanceSlot.label,
       total: price + deliveryFee,
       createdAt: new Date().toISOString(),
+      batchId: selectedTime,
+      status: 'pending' as const,
     }
     localStorage.setItem('lastOrder', JSON.stringify(order))
+    addOrder(order)
     clearCart()
 
     // Automatically trigger receipt PDF download for the customer
@@ -276,6 +338,7 @@ export default function Checkout() {
     window.open(waUrl, '_blank', 'noopener,noreferrer')
     navigate('/order-confirmation')
   }
+
 
   return (
     <main className="max-w-md mx-auto pb-36 sm:pb-24 animate-fade-in">
@@ -384,11 +447,10 @@ export default function Checkout() {
                   <div
                     key={p.id}
                     onClick={() => handleSelectProfile(p)}
-                    className={`flex-shrink-0 w-52 p-3 bg-white border rounded-xl cursor-pointer transition-all duration-200 hover:shadow-sm ${
-                      isSelected
+                    className={`flex-shrink-0 w-52 p-3 bg-white border rounded-xl cursor-pointer transition-all duration-200 hover:shadow-sm ${isSelected
                         ? 'border-[#C62828] bg-red-50/10 shadow-sm shadow-[#C62828]/5'
                         : 'border-gray-200 hover:border-gray-300'
-                    }`}
+                      }`}
                   >
                     <div className="flex items-start justify-between gap-1 mb-1.5">
                       <div className="font-bold text-gray-800 text-[11px] truncate flex-1 leading-snug">
@@ -558,11 +620,10 @@ export default function Checkout() {
                   key={slot.id}
                   type="button"
                   onClick={() => setSelectedDistance(slot.id)}
-                  className={`p-3 rounded-2xl text-left border transition-all duration-200 flex flex-col justify-between min-h-[72px] relative ${
-                    isActive
+                  className={`p-3 rounded-2xl text-left border transition-all duration-200 flex flex-col justify-between min-h-[72px] relative ${isActive
                       ? 'border-[#C62828] bg-red-50/10 shadow-sm ring-1 ring-[#C62828]'
                       : 'border-gray-200 bg-white hover:border-gray-300'
-                  }`}
+                    }`}
                 >
                   <div className="flex justify-between items-center w-full mb-1">
                     <span className="text-xs font-bold text-gray-800">{slot.label}</span>
@@ -581,30 +642,66 @@ export default function Checkout() {
           </div>
         </div>
 
-        {/* Waktu Pengiriman */}
-        <div>
-          <label className="block text-sm font-semibold text-[#1F2937] mb-1.5">
-            <Clock className="w-4 h-4 inline mr-1.5 text-gray-400" />
-            Waktu Pengiriman
+        {/* Jadwal Pengiriman Batch */}
+        <div className="space-y-3">
+          <label className="block text-sm font-semibold text-[#1F2937]">
+            <Clock className="w-4 h-4 inline mr-1.5 text-[#C62828]" />
+            Jadwal Pengiriman Batch
           </label>
-          <div className="grid grid-cols-3 gap-2">
-            {TIME_SLOTS.map((slot) => (
-              <button
-                key={slot.id}
-                type="button"
-                onClick={() => {
-                  setSelectedTime(slot.id)
-                  setValue('deliveryTime', slot.value)
-                }}
-                className={`py-2.5 px-3 rounded-xl text-sm font-medium transition-all ${
-                  selectedTime === slot.id
-                    ? 'bg-[#C62828] text-white shadow-md'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                }`}
-              >
-                {slot.label}
-              </button>
-            ))}
+
+          {/* Info Notice Banner */}
+          <div className="bg-red-50 border border-red-100 rounded-2xl p-4 flex items-start gap-3 shadow-sm">
+            <Clock className="w-5 h-5 text-[#C62828] shrink-0 mt-0.5" />
+            <p className="text-xs text-red-900 leading-relaxed font-medium">
+              Untuk menjaga kualitas layanan dan ketepatan waktu, pengiriman menggunakan sistem batch terjadwal.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            {batches.map((batch) => {
+              const remaining = getRemainingQuota(batch.id)
+              const isFull = remaining === 0
+              const isActive = selectedTime === batch.id
+
+              return (
+                <button
+                  key={batch.id}
+                  type="button"
+                  disabled={isFull}
+                  onClick={() => {
+                    setSelectedTime(batch.id)
+                  }}
+                  className={`p-3.5 rounded-2xl text-left border transition-all duration-200 flex flex-col justify-between min-h-[96px] relative ${
+                    isActive
+                      ? 'border-[#C62828] bg-red-50/10 shadow-sm ring-1 ring-[#C62828]'
+                      : isFull
+                      ? 'border-gray-200 bg-gray-50 opacity-60 cursor-not-allowed pointer-events-none'
+                      : 'border-gray-200 bg-white hover:border-gray-300'
+                  }`}
+                >
+                  <div className="flex justify-between items-start w-full">
+                    <span className="text-xs font-bold text-gray-800">{batch.name}</span>
+                    {isActive && (
+                      <span className="w-3.5 h-3.5 rounded-full bg-[#C62828] flex items-center justify-center">
+                        <span className="w-1.5 h-1.5 rounded-full bg-white" />
+                      </span>
+                    )}
+                  </div>
+                  <div className="mt-1 text-xs font-medium text-gray-600">
+                    {batch.timeRange}
+                  </div>
+                  <div className="mt-2 text-[10px] font-bold">
+                    {isFull ? (
+                      <span className="text-red-600 font-bold">Slot pengiriman telah penuh</span>
+                    ) : (
+                      <span className={remaining <= 3 ? 'text-amber-600' : 'text-[#16A34A]'}>
+                        Sisa {remaining} slot
+                      </span>
+                    )}
+                  </div>
+                </button>
+              )
+            })}
           </div>
           <input
             type="hidden"
@@ -614,6 +711,7 @@ export default function Checkout() {
             <p className="text-red-500 text-xs mt-1">{errors.deliveryTime.message}</p>
           )}
         </div>
+
 
         {/* Catatan */}
         <div>
@@ -660,13 +758,18 @@ export default function Checkout() {
         </div>
 
         {/* Submit */}
-        <button
-          type="submit"
-          disabled={isSubmitting}
-          className="w-full btn-primary py-4 text-base font-bold mt-4 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          Kirim Pesanan via WhatsApp
-        </button>
+        {(() => {
+          const isSelectedBatchFull = getRemainingQuota(selectedTime) === 0
+          return (
+            <button
+              type="submit"
+              disabled={isSubmitting || isSelectedBatchFull}
+              className="w-full btn-primary py-4 text-base font-bold mt-4 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isSelectedBatchFull ? 'Slot Pengiriman Penuh' : 'Kirim Pesanan via WhatsApp'}
+            </button>
+          )
+        })()}
       </form>
     </main>
   )

@@ -8,16 +8,37 @@ async function getMonochromeLogo(src: string): Promise<{ dataUrl: string; width:
     const img = new Image()
     img.crossOrigin = 'anonymous'
     img.onload = () => {
+      // Limit maximum dimension to 300px to drastically reduce file size
+      const maxDim = 300
+      let w = img.width
+      let h = img.height
+      if (w > maxDim || h > maxDim) {
+        if (w > h) {
+          h = Math.round((h * maxDim) / w)
+          w = maxDim
+        } else {
+          w = Math.round((w * maxDim) / h)
+          h = maxDim
+        }
+      }
+
       const canvas = document.createElement('canvas')
-      canvas.width = img.width
-      canvas.height = img.height
+      canvas.width = w
+      canvas.height = h
       const ctx = canvas.getContext('2d')
       if (!ctx) {
-        resolve({ dataUrl: src, width: img.width, height: img.height })
+        resolve({ dataUrl: src, width: w, height: h })
         return
       }
-      ctx.drawImage(img, 0, 0)
-      const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+
+      // Fill background white (needed for JPEG and grayscale)
+      ctx.fillStyle = '#FFFFFF'
+      ctx.fillRect(0, 0, w, h)
+
+      // Draw resized image
+      ctx.drawImage(img, 0, 0, w, h)
+
+      const imgData = ctx.getImageData(0, 0, w, h)
       const data = imgData.data
       for (let i = 0; i < data.length; i += 4) {
         const r = data[i]
@@ -30,7 +51,9 @@ async function getMonochromeLogo(src: string): Promise<{ dataUrl: string; width:
         data[i + 2] = gray
       }
       ctx.putImageData(imgData, 0, 0)
-      resolve({ dataUrl: canvas.toDataURL('image/png'), width: img.width, height: img.height })
+      
+      // Export as compressed JPEG (0.5 quality)
+      resolve({ dataUrl: canvas.toDataURL('image/jpeg', 0.5), width: w, height: h })
     }
     img.onerror = () => {
       reject(new Error('Failed to load logo image'))
@@ -125,7 +148,7 @@ export async function generateReceiptPDF(order: OrderData) {
 
   // Draw Logo
   if (logoDataUrl && logoHeight > 0) {
-    doc.addImage(logoDataUrl, 'PNG', 40 - logoWidth / 2, curY, logoWidth, logoHeight)
+    doc.addImage(logoDataUrl, 'JPEG', 40 - logoWidth / 2, curY, logoWidth, logoHeight)
     curY += logoHeight + 4
   }
 

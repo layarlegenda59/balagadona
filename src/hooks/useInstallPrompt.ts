@@ -5,12 +5,21 @@ let deferredPrompt: any = null
 
 export function useInstallPrompt() {
   const [showBanner, setShowBanner] = useState(false)
+  const [isInstallable, setIsInstallable] = useState(!!deferredPrompt)
+  const [isIOS, setIsIOS] = useState(false)
 
   useEffect(() => {
+    // Check if iOS/Safari
+    const ua = window.navigator.userAgent.toLowerCase()
+    const isIOSDevice = /iphone|ipad|ipod/.test(ua)
+    const isSafari = /safari/.test(ua) && !/crios|fxios|opios|mercury/.test(ua)
+    setIsIOS(isIOSDevice && isSafari)
+
     const handleBeforeInstallPrompt = (e: Event) => {
       // Prevent default install bar
       e.preventDefault()
       deferredPrompt = e
+      setIsInstallable(true)
 
       const dismissed = localStorage.getItem('pwa-install-dismissed')
       const visitCount = parseInt(sessionStorage.getItem('menu-visits') || '0', 10)
@@ -28,6 +37,7 @@ export function useInstallPrompt() {
     const visitCount = parseInt(sessionStorage.getItem('menu-visits') || '0', 10)
     if (deferredPrompt && !dismissed && visitCount >= 1) {
       setShowBanner(true)
+      setIsInstallable(true)
     }
 
     return () => {
@@ -43,6 +53,7 @@ export function useInstallPrompt() {
     console.log(`User response to install: ${outcome}`)
 
     deferredPrompt = null
+    setIsInstallable(false)
     setShowBanner(false)
   }, [])
 
@@ -58,11 +69,14 @@ export function useInstallPrompt() {
     const dismissed = localStorage.getItem('pwa-install-dismissed')
     if (deferredPrompt && !dismissed) {
       setShowBanner(true)
+      setIsInstallable(true)
     }
   }, [])
 
   return {
     showBanner,
+    isInstallable,
+    isIOS,
     triggerInstall,
     dismissBanner,
     recordMenuVisit,
