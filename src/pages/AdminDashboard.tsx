@@ -146,7 +146,10 @@ export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState<'overview' | 'batches' | 'quotas'>('overview')
 
   const [syncTick, setSyncTick] = useState(0)
-  const [isAudioEnabled, setIsAudioEnabled] = useState(false)
+  const [isAudioEnabled, setIsAudioEnabled] = useState(() => {
+    const saved = localStorage.getItem('admin-audio-enabled')
+    return saved !== 'false' // default to true if not set
+  })
 
   // Screen Wake Lock to keep the screen standby and prevent phone lock/sleep
   useEffect(() => {
@@ -197,7 +200,7 @@ export default function AdminDashboard() {
       if (!exists && prevOrders.length > 0) {
         // check if it's not a demo seeding bulk insert
         const isDemo = newOrder.id?.includes('DEMO')
-        if (!isDemo) {
+        if (!isDemo && isAudioEnabled) {
           playNewOrderNotification()
           toast.info('🔔 Ada Pesanan Baru Masuk!', {
             duration: 5000,
@@ -210,7 +213,9 @@ export default function AdminDashboard() {
     orders.forEach((newOrder) => {
       const prevOrder = prevOrders.find((o) => o.id === newOrder.id)
       if (prevOrder && prevOrder.status !== 'delivered' && newOrder.status === 'delivered') {
-        playDeliveredNotification(newOrder.customer.name || 'Pelanggan')
+        if (isAudioEnabled) {
+          playDeliveredNotification(newOrder.customer.name || 'Pelanggan')
+        }
         toast.success(`✅ Pesanan ${newOrder.customer.name || 'Pelanggan'} selesai diantar!`, {
           duration: 5000,
         })
@@ -218,7 +223,7 @@ export default function AdminDashboard() {
     })
 
     setPrevOrders(orders)
-  }, [orders, prevOrders])
+  }, [orders, prevOrders, isAudioEnabled])
 
   // Real-time cross-tab synchronization & force re-render via syncTick
   useEffect(() => {
@@ -446,9 +451,15 @@ export default function AdminDashboard() {
             <button
               type="button"
               onClick={() => {
-                playNewOrderNotification()
-                setIsAudioEnabled(true)
-                toast.success('🔔 Notifikasi suara berhasil diaktifkan!')
+                const nextState = !isAudioEnabled
+                setIsAudioEnabled(nextState)
+                localStorage.setItem('admin-audio-enabled', String(nextState))
+                if (nextState) {
+                  playNewOrderNotification()
+                  toast.success('🔔 Notifikasi suara diaktifkan!')
+                } else {
+                  toast.info('🔕 Notifikasi suara dinonaktifkan.')
+                }
               }}
               className={`px-3 py-2 rounded-xl text-[9px] font-bold shrink-0 transition-all active:scale-95 flex items-center gap-1 shadow-sm border ${
                 isAudioEnabled
