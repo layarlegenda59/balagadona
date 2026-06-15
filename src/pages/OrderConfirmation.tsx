@@ -8,6 +8,11 @@ import { motion, AnimatePresence } from 'framer-motion'
 import logoImage from '../assets/Logo Balagadona_fix.png'
 import { supabase } from '../lib/supabase'
 import { generateReceiptPDF } from '../lib/pdf'
+import bintang1Audio from '../assets/Bintang 1.mp3'
+import bintang2Audio from '../assets/Bintang 2.mp3'
+import bintang3Audio from '../assets/Bintang 3.mp3'
+import bintang4Audio from '../assets/Bintang 4.mp3'
+import bintang5Audio from '../assets/Bintang 5.mp3'
 
 export default function OrderConfirmation() {
 
@@ -78,59 +83,26 @@ export default function OrderConfirmation() {
       return
     }
 
-    // Warm, friendly Indonesian female voice assistant thank-you greeting
-    // Triggered synchronously first to comply with browser user gesture policies
-    if ('speechSynthesis' in window) {
-      // More natural, conversational text with pauses (commas/ellipsis signal natural breathing)
-      let speechText = ''
-      if (rating === 5) {
-        speechText = `Waaah, makasih banget ya sudah kasih bintang lima! Kami seneng banget deh dengernya. Semoga Batagornya tadi enak dan bikin kenyang ya. Ditunggu pesanan berikutnya, kapan aja boleh!`
-      } else if (rating === 4) {
-        speechText = `Terima kasih ya atas bintang empatnya, kami senang banget kamu puas. Kalau ada yang bisa kami tingkatin lagi, kasih tau kami ya. Sampai ketemu di pesanan berikutnya!`
-      } else if (rating === 3) {
-        speechText = `Makasih ya udah mau kasih masukan. Kami minta maaf kalau ada yang belum sesuai harapan kamu. Kami akan terus berusaha jadi lebih baik, ya!`
-      } else {
-        speechText = `Aduh, kami minta maaf banget ya atas pengalaman yang kurang menyenangkan. Masukan kamu sangat berarti buat kami. Kami janji akan terus belajar dan memperbaiki diri. Terima kasih banyak ya, sudah mau jujur sama kami.`
-      }
+    // Play the pre-recorded voice assistant thank-you audio corresponding to the star rating
+    let audioSrc = ''
+    if (rating === 5) {
+      audioSrc = bintang5Audio
+    } else if (rating === 4) {
+      audioSrc = bintang4Audio
+    } else if (rating === 3) {
+      audioSrc = bintang3Audio
+    } else if (rating === 2) {
+      audioSrc = bintang2Audio
+    } else if (rating === 1) {
+      audioSrc = bintang1Audio
+    }
 
+    if (audioSrc) {
       try {
-        window.speechSynthesis.cancel()
-
-        const utterance = new SpeechSynthesisUtterance(speechText)
-        utterance.lang = 'id-ID'
-        utterance.rate = 0.88   // Slightly slower = natural conversational pacing
-        utterance.pitch = 1.1   // A touch higher for feminine, warm tone
-        utterance.volume = 1.0
-
-        // Auto-select the best available Indonesian female voice
-        const applyVoiceAndSpeak = () => {
-          const voices = window.speechSynthesis.getVoices()
-          if (voices.length > 0) {
-            // Priority order: Indonesian Wavenet female > Indonesian Standard female > any Indonesian > fallback
-            const femaleVoice =
-              voices.find(v => v.lang === 'id-ID' && /wavenet-[ace]/i.test(v.name)) ||
-              voices.find(v => v.lang === 'id-ID' && /female|wanita|perempuan/i.test(v.name)) ||
-              voices.find(v => v.lang === 'id-ID' && /standard-[ace]/i.test(v.name)) ||
-              voices.find(v => v.lang === 'id-ID' && !(/male|pria|laki/i.test(v.name))) ||
-              voices.find(v => v.lang === 'id-ID') ||
-              voices.find(v => v.lang.startsWith('id'))
-            if (femaleVoice) utterance.voice = femaleVoice
-          }
-          window.speechSynthesis.speak(utterance)
-        }
-
-        // Voices may not be loaded yet on first call — wait if needed
-        if (window.speechSynthesis.getVoices().length > 0) {
-          applyVoiceAndSpeak()
-        } else {
-          window.speechSynthesis.onvoiceschanged = () => {
-            window.speechSynthesis.onvoiceschanged = null
-            applyVoiceAndSpeak()
-          }
-          setTimeout(applyVoiceAndSpeak, 150) // Fallback if onvoiceschanged never fires
-        }
-      } catch (speechErr) {
-        console.warn('Speech synthesis failed to play:', speechErr)
+        const audio = new Audio(audioSrc)
+        audio.play().catch(err => console.warn('Failed to play review audio:', err))
+      } catch (err) {
+        console.warn('Audio construction failed:', err)
       }
     }
 
