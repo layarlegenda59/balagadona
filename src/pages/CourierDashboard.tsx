@@ -1,5 +1,8 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
+import PasscodeGate from '../components/features/PasscodeGate'
+import InstallBanner from '../components/features/InstallBanner'
+import { useInstallPrompt } from '../hooks/useInstallPrompt'
 import {
   Clock,
   ArrowLeft,
@@ -87,8 +90,14 @@ export default function CourierDashboard() {
     toast.success('Pesanan berhasil diselesaikan!')
   }
 
+  const { showBanner, triggerInstall, dismissBanner } = useInstallPrompt()
+
   return (
-    <main className="max-w-md mx-auto px-4 pb-28 pt-4 animate-fade-in text-[#1F2937] bg-gray-50 min-h-screen">
+    <PasscodeGate target="courier">
+      {showBanner && (
+        <InstallBanner onInstall={triggerInstall} onDismiss={dismissBanner} />
+      )}
+      <main className="max-w-md mx-auto px-4 pb-28 pt-4 animate-fade-in text-[#1F2937] bg-gray-50 min-h-screen">
       {/* Header */}
       <div className="flex items-center gap-3 mb-4">
         <div className="w-9 h-9 flex items-center justify-center rounded-xl bg-[#C62828] text-white shadow-sm">
@@ -106,7 +115,7 @@ export default function CourierDashboard() {
           Pilih Batch Pengiriman
         </span>
         <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none -mx-3 px-3 snap-x">
-          {batches.map((b) => {
+          {batches.filter(b => b.id !== 'store-settings').map((b) => {
             const count = orders.filter((o) => o.batchId === b.id).length
             const isSelected = selectedBatchId === b.id
             return (
@@ -289,6 +298,7 @@ export default function CourierDashboard() {
         )}
       </div>
     </main>
+    </PasscodeGate>
   )
 }
 

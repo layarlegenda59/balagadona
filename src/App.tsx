@@ -17,6 +17,7 @@ import AdminDashboard from './pages/AdminDashboard'
 import CourierDashboard from './pages/CourierDashboard'
 import NotFound from './pages/NotFound'
 import { useDeliveryStore } from './stores/deliveryStore'
+import { resumeSharedAudioContext } from './lib/audio'
 
 function AppInner() {
   console.log("AppInner rendering...");
@@ -27,13 +28,35 @@ function AppInner() {
   // Dynamically sync and update document title on route transitions
   useEffect(() => {
     const store = useDeliveryStore.getState()
-    const isPortal = location.pathname.startsWith('/admin') || location.pathname.startsWith('/courier')
+    const isAdmin = location.pathname.startsWith('/admin')
+    const isCourier = location.pathname.startsWith('/courier')
+    const isPortal = isAdmin || isCourier
     
     // Only re-sync when crossing the portal/customer boundary
     if (lastSyncModeRef.current !== isPortal) {
       lastSyncModeRef.current = isPortal
       store.initializeSupabaseSync(isPortal)
     }
+
+    // ── Update PWA manifest & theme-color per role ──────────────────────
+    const manifestLink = document.querySelector<HTMLLinkElement>('link[rel="manifest"]')
+    const themeColorMeta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')
+    const appleTouchIcon = document.querySelector<HTMLLinkElement>('link[rel="apple-touch-icon"]')
+
+    if (isAdmin) {
+      if (manifestLink) manifestLink.href = '/manifest-admin.json'
+      if (themeColorMeta) themeColorMeta.content = '#1565C0'
+      if (appleTouchIcon) appleTouchIcon.href = '/icon-admin-192.png'
+    } else if (isCourier) {
+      if (manifestLink) manifestLink.href = '/manifest-courier.json'
+      if (themeColorMeta) themeColorMeta.content = '#2E7D32'
+      if (appleTouchIcon) appleTouchIcon.href = '/icon-courier-192.png'
+    } else {
+      if (manifestLink) manifestLink.href = '/manifest.json'
+      if (themeColorMeta) themeColorMeta.content = '#C62828'
+      if (appleTouchIcon) appleTouchIcon.href = '/icon-192.png'
+    }
+    // ────────────────────────────────────────────────────────────────────
 
     // Set document tab titles
     if (location.pathname.startsWith('/admin')) {
@@ -76,20 +99,23 @@ function AppInner() {
         // Re-sync Supabase immediately when phone is unlocked / brought back from background
         const isPortalActive = window.location.pathname.startsWith('/admin') || window.location.pathname.startsWith('/courier')
         store.initializeSupabaseSync(isPortalActive)
-        // Resume AudioContext if suspended
-        const AudioContext = window.AudioContext || (window as any).webkitAudioContext
-        if (AudioContext) {
-          const ctx = new AudioContext()
-          if (ctx.state === 'suspended') {
-            ctx.resume()
-          }
-        }
+        // Resume the global shared AudioContext if suspended
+        resumeSharedAudioContext()
       }
     }
 
+    const handleUserInteraction = () => {
+      resumeSharedAudioContext()
+    }
+
     document.addEventListener('visibilitychange', handleVisibilityChange)
+    window.addEventListener('click', handleUserInteraction)
+    window.addEventListener('touchstart', handleUserInteraction)
+
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange)
+      window.removeEventListener('click', handleUserInteraction)
+      window.removeEventListener('touchstart', handleUserInteraction)
       if (wakeLock) {
         wakeLock.release().catch((e: any) => console.log(e))
       }

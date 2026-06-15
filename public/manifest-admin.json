@@ -1,0 +1,25 @@
+{
+  "short_name": "Admin Balagadona",
+  "name": "Admin Balagadona – Dashboard",
+  "description": "Dashboard pengelolaan pesanan dan operasional Batagor Balagadona.",
+  "icons": [
+    {
+      "src": "/icon-admin-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-admin-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": "/admin",
+  "scope": "/admin",
+  "background_color": "#0D1B2A",
+  "theme_color": "#1565C0",
+  "display": "standalone",
+  "orientation": "portrait"
+}

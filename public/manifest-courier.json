@@ -1,0 +1,25 @@
+{
+  "short_name": "Kurir Balagadona",
+  "name": "Kurir Balagadona – Pengiriman",
+  "description": "Aplikasi pengiriman pesanan untuk kurir Batagor Balagadona.",
+  "icons": [
+    {
+      "src": "/icon-courier-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-courier-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": "/courier",
+  "scope": "/courier",
+  "background_color": "#0A1F0A",
+  "theme_color": "#2E7D32",
+  "display": "standalone",
+  "orientation": "portrait"
+}

@@ -1,5 +1,8 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
+import PasscodeGate from '../components/features/PasscodeGate'
+import InstallBanner from '../components/features/InstallBanner'
+import { useInstallPrompt } from '../hooks/useInstallPrompt'
 import {
   Clock,
   Settings,
@@ -21,112 +24,8 @@ import { useDeliveryStore, getMockCoords } from '../stores/deliveryStore'
 import { formatPrice } from '../constants/products'
 import { toast } from 'sonner'
 import { DeliveryBatch, OrderData } from '../types'
+import { playNewOrderNotification, playDeliveredNotification, getSharedAudioContext } from '../lib/audio'
 
-// Programmatic synthesizer sound and speech alert for incoming orders
-const playNewOrderNotification = () => {
-  try {
-    const AudioContext = window.AudioContext || (window as any).webkitAudioContext
-    if (AudioContext) {
-      const ctx = new AudioContext()
-      if (ctx.state === 'suspended') {
-        ctx.resume().catch(e => console.warn(e))
-      }
-      
-      // Chime note 1 (D5)
-      const osc1 = ctx.createOscillator()
-      const gain1 = ctx.createGain()
-      osc1.type = 'sine'
-      osc1.frequency.setValueAtTime(587.33, ctx.currentTime)
-      gain1.gain.setValueAtTime(0.15, ctx.currentTime)
-      gain1.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4)
-      osc1.connect(gain1)
-      gain1.connect(ctx.destination)
-      osc1.start()
-      osc1.stop(ctx.currentTime + 0.4)
-
-      // Chime note 2 (A5 - slightly delayed)
-      setTimeout(() => {
-        if (ctx.state === 'suspended') {
-          ctx.resume().catch(e => console.warn(e))
-        }
-        const osc2 = ctx.createOscillator()
-        const gain2 = ctx.createGain()
-        osc2.type = 'sine'
-        osc2.frequency.setValueAtTime(880, ctx.currentTime)
-        gain2.gain.setValueAtTime(0.2, ctx.currentTime)
-        gain2.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.6)
-        osc2.connect(gain2)
-        gain2.connect(ctx.destination)
-        osc2.start()
-        osc2.stop(ctx.currentTime + 0.6)
-      }, 120)
-    }
-
-    // Voice announcement: "Ada pesanan masuk!"
-    setTimeout(() => {
-      if ('speechSynthesis' in window) {
-        const utterance = new SpeechSynthesisUtterance('Ada pesanan masuk!')
-        utterance.lang = 'id-ID'
-        utterance.rate = 1.0
-        utterance.pitch = 1.15
-        window.speechSynthesis.speak(utterance)
-      }
-    }, 600)
-  } catch (err) {
-    console.error('Failed to play sound:', err)
-  }
-}
-
-// Programmatic synthesizer chime and voice assistant for completed/delivered orders
-const playDeliveredNotification = (customerName: string) => {
-  try {
-    const nameToSpeak = customerName || 'Pelanggan'
-    const AudioContext = window.AudioContext || (window as any).webkitAudioContext
-    if (AudioContext) {
-      const ctx = new AudioContext()
-      if (ctx.state === 'suspended') {
-        ctx.resume().catch(e => console.warn(e))
-      }
-      
-      // Happy arpeggio success chord (C5 -> E5 -> G5 -> C6)
-      const playNote = (freq: number, delay: number, duration: number) => {
-        setTimeout(() => {
-          if (ctx.state === 'suspended') {
-            ctx.resume().catch(e => console.warn(e))
-          }
-          const osc = ctx.createOscillator()
-          const gain = ctx.createGain()
-          osc.type = 'sine'
-          osc.frequency.setValueAtTime(freq, ctx.currentTime)
-          gain.gain.setValueAtTime(0.12, ctx.currentTime)
-          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration)
-          osc.connect(gain)
-          gain.connect(ctx.destination)
-          osc.start()
-          osc.stop(ctx.currentTime + duration)
-        }, delay)
-      }
-
-      playNote(523.25, 0, 0.3)    // C5
-      playNote(659.25, 100, 0.3)  // E5
-      playNote(783.99, 200, 0.3)  // G5
-      playNote(1046.50, 300, 0.5) // C6
-    }
-
-    // Voice announcement: "Pesanan untuk [Nama] telah sukses diantarkan!"
-    setTimeout(() => {
-      if ('speechSynthesis' in window) {
-        const utterance = new SpeechSynthesisUtterance(`Pesanan untuk ${nameToSpeak} telah sukses diantarkan!`)
-        utterance.lang = 'id-ID'
-        utterance.rate = 1.0
-        utterance.pitch = 1.1
-        window.speechSynthesis.speak(utterance)
-      }
-    }, 800)
-  } catch (err) {
-    console.error('Failed to play delivered sound:', err)
-  }
-}
 
 export default function AdminDashboard() {
   const {
@@ -150,6 +49,81 @@ export default function AdminDashboard() {
     return saved !== 'false' // default to true if not set
   })
 
+  // Background Audio Keep-Alive to prevent sleep/suspension when locked
+  useEffect(() => {
+    // 1. Looping silent HTML5 audio element
+    const audio = new Audio('data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA')
+    audio.loop = true
+
+    // 2. Persistent sub-audible Web Audio oscillator (1 Hz at 0.0001 volume) on the global context
+    let osc: OscillatorNode | null = null
+    let gain: GainNode | null = null
+    
+    const startKeepAlive = () => {
+      if (!isAudioEnabled) return
+      
+      try {
+        // Play silent HTML5 loop
+        audio.play().catch(err => console.warn('Silent HTML5 play failed:', err))
+
+        // Start sub-audible Web Audio oscillator on the global context
+        const ctx = getSharedAudioContext()
+        if (ctx) {
+          if (!osc) {
+            osc = ctx.createOscillator()
+            gain = ctx.createGain()
+            
+            osc.frequency.setValueAtTime(1, ctx.currentTime) // 1 Hz (sub-audible)
+            gain.gain.setValueAtTime(0.0001, ctx.currentTime) // virtually silent
+            
+            osc.connect(gain)
+            gain.connect(ctx.destination)
+            
+            osc.start()
+          } else if (ctx.state === 'suspended') {
+            ctx.resume().catch(e => console.warn(e))
+          }
+        }
+      } catch (err) {
+        console.warn('Keep-alive start failed:', err)
+      }
+    }
+
+    const stopKeepAlive = () => {
+      try {
+        audio.pause()
+        const ctx = getSharedAudioContext()
+        if (ctx && ctx.state === 'running') {
+          ctx.suspend().catch(e => console.warn(e))
+        }
+      } catch (err) {
+        console.warn('Keep-alive stop failed:', err)
+      }
+    }
+
+    // Trigger keep-alive on user interaction
+    const triggerStart = () => {
+      startKeepAlive()
+    }
+
+    if (isAudioEnabled) {
+      document.addEventListener('click', triggerStart)
+      document.addEventListener('touchstart', triggerStart)
+      startKeepAlive()
+    } else {
+      stopKeepAlive()
+    }
+
+    return () => {
+      document.removeEventListener('click', triggerStart)
+      document.removeEventListener('touchstart', triggerStart)
+      audio.pause()
+      if (osc) {
+        try { osc.stop() } catch(e){}
+      }
+    }
+  }, [isAudioEnabled])
+
   // Screen Wake Lock to keep the screen standby and prevent phone lock/sleep
   useEffect(() => {
     let wakeLock: any = null
@@ -169,13 +143,10 @@ export default function AdminDashboard() {
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
         requestLock()
-        // Resume AudioContext if it was suspended by the browser
-        const AudioContext = window.AudioContext || (window as any).webkitAudioContext
-        if (AudioContext) {
-          const ctx = new AudioContext()
-          if (ctx.state === 'suspended') {
-            ctx.resume()
-          }
+        // Resume the global shared AudioContext if suspended
+        const ctx = getSharedAudioContext()
+        if (ctx && ctx.state === 'suspended') {
+          ctx.resume().catch(e => console.warn(e))
         }
       }
     }
@@ -190,13 +161,24 @@ export default function AdminDashboard() {
   }, [])
 
   // Sound Notification on New Order and Completed Delivery (handles both local updates and synced database updates)
-  const [prevOrders, setPrevOrders] = useState<OrderData[]>(orders)
+  const prevOrdersRef = useRef<OrderData[]>(orders)
+  const isFirstLoadRef = useRef(true)
+
+  // Mark first load as complete after a simple 2-second delay on mount
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      isFirstLoadRef.current = false
+    }, 2000)
+    return () => clearTimeout(timer)
+  }, [])
 
   useEffect(() => {
+    const prevOrders = prevOrdersRef.current
+
     // 1. Detect new orders (when orders array contains items not in prevOrders)
     orders.forEach((newOrder) => {
       const exists = prevOrders.some((o) => o.id === newOrder.id)
-      if (!exists && prevOrders.length > 0) {
+      if (!exists && !isFirstLoadRef.current) {
         // check if it's not a demo seeding bulk insert
         const isDemo = newOrder.id?.includes('DEMO')
         if (!isDemo && isAudioEnabled) {
@@ -213,16 +195,16 @@ export default function AdminDashboard() {
       const prevOrder = prevOrders.find((o) => o.id === newOrder.id)
       if (prevOrder && prevOrder.status !== 'delivered' && newOrder.status === 'delivered') {
         if (isAudioEnabled) {
-          playDeliveredNotification(newOrder.customer.name || 'Pelanggan')
+          playDeliveredNotification(newOrder.customer?.name || 'Pelanggan')
         }
-        toast.success(`✅ Pesanan ${newOrder.customer.name || 'Pelanggan'} selesai diantar!`, {
+        toast.success(`✅ Pesanan ${newOrder.customer?.name || 'Pelanggan'} selesai diantar!`, {
           duration: 5000,
         })
       }
     })
 
-    setPrevOrders(orders)
-  }, [orders, prevOrders, isAudioEnabled])
+    prevOrdersRef.current = orders
+  }, [orders, isAudioEnabled])
 
 
 
@@ -237,13 +219,14 @@ export default function AdminDashboard() {
   const [editTime, setEditTime] = useState('')
   const [editQuota, setEditQuota] = useState(8)
 
-  // Calculations
-  const totalSales = orders.reduce((sum, o) => sum + o.total, 0)
-  const totalActiveOrders = orders.length
+  // Calculations (only count full orders with customer data)
+  const fullOrders = orders.filter(o => o.customer)
+  const totalSales = fullOrders.reduce((sum, o) => sum + (o.total ?? 0), 0)
+  const totalActiveOrders = fullOrders.length
 
   const calculateWorkload = (batchId: string) => {
-    const batchOrders = orders.filter((o) => o.batchId === batchId && o.status !== 'delivered')
-    const totalPortions = batchOrders.reduce((sum, o) => sum + o.items.reduce((iSum, item) => iSum + item.quantity, 0), 0)
+    const batchOrders = orders.filter((o) => o.batchId === batchId && o.status !== 'delivered' && o.customer && o.items)
+    const totalPortions = batchOrders.reduce((sum, o) => sum + (o.items ?? []).reduce((iSum, item) => iSum + item.quantity, 0), 0)
 
     let totalEstKm = 0
     batchOrders.forEach((o) => {
@@ -344,8 +327,14 @@ export default function AdminDashboard() {
     }
   }
 
+  const { showBanner, triggerInstall, dismissBanner } = useInstallPrompt()
+
   return (
-    <main className="w-full max-w-md mx-auto px-4 pb-36 pt-6 animate-fade-in text-[#1F2937]">
+    <PasscodeGate target="admin">
+      {showBanner && (
+        <InstallBanner onInstall={triggerInstall} onDismiss={dismissBanner} />
+      )}
+      <main className="w-full max-w-md mx-auto px-4 pb-36 pt-6 animate-fade-in text-[#1F2937]">
       {/* Header */}
       <div className="flex items-center gap-3 mb-5">
         <div className="w-10 h-10 flex items-center justify-center rounded-xl bg-red-50">
@@ -416,12 +405,12 @@ export default function AdminDashboard() {
               </span>
               <div>
                 <h4 className="font-bold text-gray-800">
-                  {isAudioEnabled ? 'Notifikasi Suara Aktif' : 'Aktifkan Suara Notifikasi'}
+                  {isAudioEnabled ? 'Notifikasi & Standby Aktif' : 'Aktifkan Suara & Standby'}
                 </h4>
                 <p className="text-[9px] text-gray-500 leading-tight mt-0.5">
                   {isAudioEnabled 
-                    ? 'Ringtone & suara otomatis berbunyi ketika pelanggan mengirim pesanan.' 
-                    : 'Harap aktifkan suara agar ringtone otomatis berbunyi saat ada pesanan baru.'}
+                    ? 'Ringtone aktif & browser terkunci agar standby terus meski HP dikunci.' 
+                    : 'Aktifkan suara agar ringtone & mode standby lock screen berjalan.'}
                 </p>
               </div>
             </div>
@@ -433,9 +422,9 @@ export default function AdminDashboard() {
                 localStorage.setItem('admin-audio-enabled', String(nextState))
                 if (nextState) {
                   playNewOrderNotification()
-                  toast.success('🔔 Notifikasi suara diaktifkan!')
+                  toast.success('🔔 Suara & Standby Lock Screen Aktif!')
                 } else {
-                  toast.info('🔕 Notifikasi suara dinonaktifkan.')
+                  toast.info('🔕 Suara & Standby Lock Screen Dinonaktifkan.')
                 }
               }}
               className={`px-3 py-2 rounded-xl text-[9px] font-bold shrink-0 transition-all active:scale-95 flex items-center gap-1 shadow-sm border ${
@@ -454,7 +443,7 @@ export default function AdminDashboard() {
               Kapasitas Batch Saat Ini
             </h3>
             <div className="space-y-2">
-              {batches.map((b) => {
+              {batches.filter(b => b.id !== 'store-settings').map((b) => {
                 const totalInBatch = orders.filter((o) => o.batchId === b.id).length
                 const remaining = getRemainingQuota(b.id)
                 const isFull = remaining === 0
@@ -503,15 +492,26 @@ export default function AdminDashboard() {
             <h3 className="font-bold text-xs text-gray-400 uppercase tracking-wider mb-2.5 flex justify-between items-center">
               <span>Daftar Pesanan Masuk</span>
               <span className="text-[10px] text-[#C62828] bg-red-50 px-2 py-0.5 rounded-full font-bold">
-                {orders.length} Total
+                {totalActiveOrders} Total
               </span>
             </h3>
 
-            {orders.length === 0 ? (
+            {totalActiveOrders === 0 ? (
               <p className="text-xs text-gray-400 py-6 text-center italic">Belum ada pesanan masuk.</p>
             ) : (
               <div className="space-y-2.5">
-                {orders.map((o) => (
+                {[...orders]
+                  .filter(o => o.customer) // only show full orders (skip skeletal customer-mode entries)
+                  .sort((a, b) => {
+                    // Newest first: pending/preparing/ready before delivered, then by createdAt desc
+                    const statusOrder: Record<string, number> = { pending: 0, preparing: 1, ready: 2, delivering: 3, delivered: 4 }
+                    const aPriority = statusOrder[a.status ?? 'pending'] ?? 0
+                    const bPriority = statusOrder[b.status ?? 'pending'] ?? 0
+                    if (aPriority !== bPriority) return aPriority - bPriority
+                    // Within same status group, newest first
+                    return new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime()
+                  })
+                  .map((o) => (
                   <div
                     key={o.id}
                     className="flex justify-between items-start p-3 bg-gray-50 border border-gray-100 rounded-xl text-xs relative"
@@ -636,7 +636,7 @@ export default function AdminDashboard() {
       {/* Auto Batching tab */}
       {activeTab === 'batches' && (
         <div className="space-y-4">
-          {batches.map((b) => {
+          {batches.filter(b => b.id !== 'store-settings').map((b) => {
             const batchOrders = orders.filter((o) => o.batchId === b.id)
             const workload = calculateWorkload(b.id)
 
@@ -709,6 +709,57 @@ export default function AdminDashboard() {
       {/* Quotas & Batch Settings Tab - FULL CRUD BATCH */}
       {activeTab === 'quotas' && (
         <div className="space-y-4">
+          {/* Store Open/Close Toggle Control */}
+          {(() => {
+            const settingsBatch = batches.find(b => b.id === 'store-settings')
+            const isClosed = settingsBatch?.maxQuota === 0
+            
+            return (
+              <div className={`bg-white border rounded-2xl p-4 shadow-sm space-y-3 transition-all duration-300 ${
+                isClosed 
+                  ? 'border-red-200 bg-red-50/10' 
+                  : 'border-green-200 bg-green-50/10'
+              }`}>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xl">{isClosed ? '🔴' : '🟢'}</span>
+                    <div>
+                      <h3 className="font-bold text-xs text-gray-800 uppercase tracking-wider">
+                        Status Kedai Balagadona
+                      </h3>
+                      <p className="text-[10px] text-gray-500 mt-0.5 leading-tight">
+                        {isClosed 
+                          ? 'Kedai sedang TUTUP. Pelanggan tidak dapat melakukan checkout.' 
+                          : 'Kedai sedang BUKA. Pelanggan bebas memesan.'}
+                      </p>
+                    </div>
+                  </div>
+                  
+                  {/* Premium Switch / Toggle Button */}
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const nextQuota = isClosed ? 1 : 0
+                      try {
+                        await updateBatch('store-settings', 'Store Status', 'open-status', nextQuota)
+                        toast.success(isClosed ? 'Kedai berhasil DIBUKA!' : 'Kedai berhasil DITUTUP sementara!')
+                      } catch (err) {
+                        toast.error('Gagal memperbarui status kedai.')
+                      }
+                    }}
+                    className={`w-14 h-7 rounded-full transition-all duration-300 p-1 flex items-center relative ${
+                      isClosed ? 'bg-red-500' : 'bg-green-600'
+                    }`}
+                  >
+                    <span className={`w-5 h-5 rounded-full bg-white shadow-md transform transition-all duration-300 absolute ${
+                      isClosed ? 'translate-x-[30px]' : 'translate-x-0'
+                    }`} />
+                  </button>
+                </div>
+              </div>
+            )
+          })()}
+
           <div className="bg-white border border-gray-100 rounded-2xl p-3.5 shadow-sm space-y-3">
             <div className="flex justify-between items-center">
               <h3 className="font-bold text-xs text-gray-400 uppercase tracking-wider flex items-center gap-1">
@@ -785,7 +836,7 @@ export default function AdminDashboard() {
 
             {/* List of Batches with inline Edit / Delete (CRUD) */}
             <div className="space-y-3">
-              {batches.map((b) => {
+              {batches.filter(b => b.id !== 'store-settings').map((b) => {
                 const isEditing = editingBatchId === b.id
 
                 return (
@@ -902,6 +953,7 @@ export default function AdminDashboard() {
           </div>
         </div>
       )}
-    </main>
+      </main>
+    </PasscodeGate>
   )
 }

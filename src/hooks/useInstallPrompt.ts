@@ -3,6 +3,19 @@ import { useState, useEffect, useCallback } from 'react'
 // Share the deferred event globally across hook instances
 let deferredPrompt: any = null
 
+// Role-specific dismiss keys so each PWA tracks dismissal independently
+function getDismissKey() {
+  const path = window.location.pathname
+  if (path.startsWith('/admin')) return 'pwa-install-dismissed-admin'
+  if (path.startsWith('/courier')) return 'pwa-install-dismissed-courier'
+  return 'pwa-install-dismissed'
+}
+
+function isPortalRoute() {
+  const path = window.location.pathname
+  return path.startsWith('/admin') || path.startsWith('/courier')
+}
+
 export function useInstallPrompt() {
   const [showBanner, setShowBanner] = useState(false)
   const [isInstallable, setIsInstallable] = useState(!!deferredPrompt)
@@ -21,11 +34,13 @@ export function useInstallPrompt() {
       deferredPrompt = e
       setIsInstallable(true)
 
-      const dismissed = localStorage.getItem('pwa-install-dismissed')
+      const dismissed = localStorage.getItem(getDismissKey())
       const visitCount = parseInt(sessionStorage.getItem('menu-visits') || '0', 10)
 
-      // Show banner if not dismissed and visited menu at least once
-      if (!dismissed && visitCount >= 1) {
+      // Portal routes (admin/courier): show immediately — no visit-count gate
+      // Customer routes: show banner only after 1+ menu visit
+      const shouldShow = isPortalRoute() ? !dismissed : (!dismissed && visitCount >= 1)
+      if (shouldShow) {
         setShowBanner(true)
       }
     }
@@ -33,9 +48,10 @@ export function useInstallPrompt() {
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt)
 
     // Check conditions if event already fired
-    const dismissed = localStorage.getItem('pwa-install-dismissed')
+    const dismissed = localStorage.getItem(getDismissKey())
     const visitCount = parseInt(sessionStorage.getItem('menu-visits') || '0', 10)
-    if (deferredPrompt && !dismissed && visitCount >= 1) {
+    const shouldShow = isPortalRoute() ? !dismissed : (!dismissed && visitCount >= 1)
+    if (deferredPrompt && shouldShow) {
       setShowBanner(true)
       setIsInstallable(true)
     }
@@ -58,7 +74,7 @@ export function useInstallPrompt() {
   }, [])
 
   const dismissBanner = useCallback(() => {
-    localStorage.setItem('pwa-install-dismissed', 'true')
+    localStorage.setItem(getDismissKey(), 'true')
     setShowBanner(false)
   }, [])
 
@@ -66,7 +82,7 @@ export function useInstallPrompt() {
     const visits = parseInt(sessionStorage.getItem('menu-visits') || '0', 10)
     sessionStorage.setItem('menu-visits', (visits + 1).toString())
 
-    const dismissed = localStorage.getItem('pwa-install-dismissed')
+    const dismissed = localStorage.getItem(getDismissKey())
     if (deferredPrompt && !dismissed) {
       setShowBanner(true)
       setIsInstallable(true)
