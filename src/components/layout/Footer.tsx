@@ -2,6 +2,7 @@ import { Compass, Mail, PhoneCall } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { WHATSAPP_NUMBER } from '../../constants/products'
 import logoImage from '../../assets/Logo Balagadona_fix.png'
+import { getWhatsAppUrl } from '../../lib/utils'
 
 export default function Footer() {
   const currentYear = new Date().getFullYear()
@@ -37,7 +38,7 @@ export default function Footer() {
               Hubungi Kami
             </h4>
             <a
-              href={`https://wa.me/${WHATSAPP_NUMBER}`}
+              href={getWhatsAppUrl(WHATSAPP_NUMBER).url}
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center gap-1 text-gray-400 hover:text-white transition-colors"

@@ -19,6 +19,7 @@ import { useDeliveryStore } from '../stores/deliveryStore'
 import { formatPrice } from '../constants/products'
 import { toast } from 'sonner'
 import { playDeliveredNotification, getSharedAudioContext, startBackgroundKeepAlive, stopBackgroundKeepAlive } from '../lib/audio'
+import { getWhatsAppUrl } from '../lib/utils'
 
 export default function CourierDashboard() {
   const { batches, orders, updateOrderStatus } = useDeliveryStore()
@@ -397,7 +398,7 @@ export default function CourierDashboard() {
                         
                         {/* Contact WhatsApp */}
                         <a
-                          href={`https://wa.me/${order.customer.phone.replace(/[^0-9]/g, '')}`}
+                          href={getWhatsAppUrl(order.customer.phone).url}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="w-9 h-9 flex items-center justify-center rounded-xl bg-green-50 text-green-600 hover:bg-green-100 border border-green-100 active:scale-90 transition-transform shadow-sm"

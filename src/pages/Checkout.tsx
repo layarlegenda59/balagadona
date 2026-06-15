@@ -9,6 +9,7 @@ import { useCartStore } from '../stores/cartStore'
 import { formatPrice, WHATSAPP_NUMBER } from '../constants/products'
 import { generateReceiptPDF } from '../lib/pdf'
 import { toast } from 'sonner'
+import { getWhatsAppUrl } from '../lib/utils'
 
 const getEmoji = (code: number) => String.fromCodePoint(code)
 
@@ -296,8 +297,7 @@ export default function Checkout() {
       .filter((line) => line !== undefined)
       .join('\n')
 
-    const encoded = encodeURIComponent(message)
-    const waUrl = `https://wa.me/${WHATSAPP_NUMBER}?text=${encoded}`
+    const { url: waUrl, isMobile } = getWhatsAppUrl(WHATSAPP_NUMBER, message)
 
     const order = {
       id: `ORD-${Date.now()}`,
@@ -319,7 +319,11 @@ export default function Checkout() {
       await addOrder(order)
       toast.dismiss(saveToastId)
       clearCart()
-      window.open(waUrl, '_blank', 'noopener,noreferrer')
+      if (isMobile) {
+        window.location.href = waUrl
+      } else {
+        window.open(waUrl, '_blank', 'noopener,noreferrer')
+      }
       navigate('/order-confirmation')
     } catch (err) {
       toast.error('Gagal mengirim pesanan. Silakan coba lagi.')

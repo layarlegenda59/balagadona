@@ -1,7 +1,8 @@
 import { WHATSAPP_NUMBER } from '../../constants/products'
+import { getWhatsAppUrl } from '../../lib/utils'
 
 export default function WhatsAppButton() {
-  const href = `https://wa.me/${WHATSAPP_NUMBER}?text=Halo%20Batagor%20Balagadona%2C%20saya%20ingin%20memesan.`
+  const href = getWhatsAppUrl(WHATSAPP_NUMBER, 'Halo Batagor Balagadona, saya ingin memesan.').url
 
   return (
     <a

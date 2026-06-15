@@ -1,6 +1,5 @@
 import orderMasukAudio from '../assets/Order Masuk.mp3'
 import courierAudio from '../assets/Courier.mp3'
-import selesaiAudio from '../assets/Selesai.mp3'
 
 let sharedAudioCtx: AudioContext | null = null
 
@@ -50,15 +49,20 @@ export const playDeliveredNotification = (customerName: string) => {
   }
 }
 
-// Play selesai order sound using the new custom selesai asset
-export const playSelesaiNotification = () => {
-  try {
-    const audio = new Audio(selesaiAudio)
-    audio.play().catch(err => {
-      console.warn('Failed to play Selesai audio (Selesai.mp3):', err)
-    })
-  } catch (err) {
-    console.error('Failed to play Selesai notification:', err)
+// Play selesai order sound by speaking the customer's name via SpeechSynthesis
+export const playSelesaiNotification = (customerName: string) => {
+  if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+    try {
+      window.speechSynthesis.cancel() // Cancel any ongoing speech
+      const text = `Pesanan atas nama ${customerName} telah sukses diantarkan.`
+      const utterance = new SpeechSynthesisUtterance(text)
+      utterance.lang = 'id-ID' // Indonesian language
+      utterance.rate = 0.9     // slightly slower for clarity
+      utterance.pitch = 1.0    // natural pitch
+      window.speechSynthesis.speak(utterance)
+    } catch (err) {
+      console.warn('Failed to speak customer name via SpeechSynthesis:', err)
+    }
   }
 }
 

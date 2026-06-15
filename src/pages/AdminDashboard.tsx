@@ -182,7 +182,7 @@ export default function AdminDashboard() {
       const prevOrder = prevOrders.find((o) => o.id === newOrder.id)
       if (prevOrder && prevOrder.status !== 'delivered' && newOrder.status === 'delivered') {
         if (isAudioEnabled) {
-          playSelesaiNotification()
+          playSelesaiNotification(newOrder.customer?.name || 'Pelanggan')
         }
         toast.success(`✅ Pesanan ${newOrder.customer?.name || 'Pelanggan'} selesai diantar!`, {
           duration: 5000,

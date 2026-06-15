@@ -8,6 +8,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import logoImage from '../assets/Logo Balagadona_fix.png'
 import { supabase } from '../lib/supabase'
 import { generateReceiptPDF } from '../lib/pdf'
+import { getWhatsAppUrl } from '../lib/utils'
 import { playNewOrderNotification, playDeliveredNotification, getSharedAudioContext, startBackgroundKeepAlive, stopBackgroundKeepAlive } from '../lib/audio'
 import bintang1Audio from '../assets/Bintang 1.mp3'
 import bintang2Audio from '../assets/Bintang 2.mp3'
@@ -573,8 +574,12 @@ export default function OrderConfirmation() {
           type="button"
           onClick={() => {
             const shareText = `Wah, saya baru saja memesan Batagor Balagadona hangat yang super renyah dan bumbunya juara banget! Batagor premium terlezat di Cimahi. Kamu juga harus coba, pesan praktis langsung di sini: https://batagor-balagadona.vercel.app 😋🔥`
-            const shareUrl = `https://wa.me/?text=${encodeURIComponent(shareText)}`
-            window.open(shareUrl, '_blank', 'noopener,noreferrer')
+            const { url: shareUrl, isMobile } = getWhatsAppUrl('', shareText)
+            if (isMobile) {
+              window.location.href = shareUrl
+            } else {
+              window.open(shareUrl, '_blank', 'noopener,noreferrer')
+            }
           }}
           className="w-full bg-[#16A34A] hover:bg-[#15803d] text-white py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all active:scale-95 mt-3 shadow-sm"
         >
