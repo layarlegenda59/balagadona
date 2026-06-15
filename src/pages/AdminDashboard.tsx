@@ -24,7 +24,7 @@ import { useDeliveryStore, getMockCoords } from '../stores/deliveryStore'
 import { formatPrice } from '../constants/products'
 import { toast } from 'sonner'
 import { DeliveryBatch, OrderData } from '../types'
-import { playNewOrderNotification, playDeliveredNotification, getSharedAudioContext } from '../lib/audio'
+import { playNewOrderNotification, playDeliveredNotification, getSharedAudioContext, startBackgroundKeepAlive, stopBackgroundKeepAlive } from '../lib/audio'
 
 
 export default function AdminDashboard() {
@@ -79,76 +79,22 @@ export default function AdminDashboard() {
 
   // Background Audio Keep-Alive to prevent sleep/suspension when locked
   useEffect(() => {
-    // 1. Looping silent HTML5 audio element
-    const audio = new Audio('data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA')
-    audio.loop = true
-
-    // 2. Persistent sub-audible Web Audio oscillator (1 Hz at 0.0001 volume) on the global context
-    let osc: OscillatorNode | null = null
-    let gain: GainNode | null = null
-    
-    const startKeepAlive = () => {
-      if (!isAudioEnabled) return
-      
-      try {
-        // Play silent HTML5 loop
-        audio.play().catch(err => console.warn('Silent HTML5 play failed:', err))
-
-        // Start sub-audible Web Audio oscillator on the global context
-        const ctx = getSharedAudioContext()
-        if (ctx) {
-          if (!osc) {
-            osc = ctx.createOscillator()
-            gain = ctx.createGain()
-            
-            osc.frequency.setValueAtTime(1, ctx.currentTime) // 1 Hz (sub-audible)
-            gain.gain.setValueAtTime(0.0001, ctx.currentTime) // virtually silent
-            
-            osc.connect(gain)
-            gain.connect(ctx.destination)
-            
-            osc.start()
-          } else if (ctx.state === 'suspended') {
-            ctx.resume().catch(e => console.warn(e))
-          }
-        }
-      } catch (err) {
-        console.warn('Keep-alive start failed:', err)
-      }
-    }
-
-    const stopKeepAlive = () => {
-      try {
-        audio.pause()
-        const ctx = getSharedAudioContext()
-        if (ctx && ctx.state === 'running') {
-          ctx.suspend().catch(e => console.warn(e))
-        }
-      } catch (err) {
-        console.warn('Keep-alive stop failed:', err)
-      }
-    }
-
-    // Trigger keep-alive on user interaction
     const triggerStart = () => {
-      startKeepAlive()
+      startBackgroundKeepAlive(isAudioEnabled)
     }
 
     if (isAudioEnabled) {
       document.addEventListener('click', triggerStart)
       document.addEventListener('touchstart', triggerStart)
-      startKeepAlive()
+      startBackgroundKeepAlive(true)
     } else {
-      stopKeepAlive()
+      stopBackgroundKeepAlive()
     }
 
     return () => {
       document.removeEventListener('click', triggerStart)
       document.removeEventListener('touchstart', triggerStart)
-      audio.pause()
-      if (osc) {
-        try { osc.stop() } catch(e){}
-      }
+      stopBackgroundKeepAlive()
     }
   }, [isAudioEnabled])
 

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { CheckCircle, CheckCircle2, Home, UtensilsCrossed, Copy, Clock, Bike, ChefHat, CheckSquare, Star, FileDown, Share2 } from 'lucide-react'
 import { OrderData } from '../types'
@@ -8,6 +8,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import logoImage from '../assets/Logo Balagadona_fix.png'
 import { supabase } from '../lib/supabase'
 import { generateReceiptPDF } from '../lib/pdf'
+import { playNewOrderNotification, playDeliveredNotification, getSharedAudioContext, startBackgroundKeepAlive, stopBackgroundKeepAlive } from '../lib/audio'
 import bintang1Audio from '../assets/Bintang 1.mp3'
 import bintang2Audio from '../assets/Bintang 2.mp3'
 import bintang3Audio from '../assets/Bintang 3.mp3'
@@ -18,6 +19,39 @@ export default function OrderConfirmation() {
 
   const [order, setOrder] = useState<OrderData | null>(null)
   const [copied, setCopied] = useState(false)
+
+  const [isAudioUnlocked, setIsAudioUnlocked] = useState(false)
+  const prevStatusRef = useRef<string>('')
+
+  // Listen to browser user interaction to unlock/resume AudioContext
+  useEffect(() => {
+    const checkAudioUnlocked = () => {
+      const ctx = getSharedAudioContext()
+      if (ctx && ctx.state === 'running') {
+        setIsAudioUnlocked(true)
+      } else {
+        setIsAudioUnlocked(false)
+      }
+    }
+
+    checkAudioUnlocked()
+
+    const handleUnlock = () => {
+      setTimeout(checkAudioUnlocked, 100)
+    }
+
+    document.addEventListener('click', handleUnlock)
+    document.addEventListener('touchstart', handleUnlock)
+
+    // Run keep-alive automatically for live order tracking on mount
+    startBackgroundKeepAlive(true)
+
+    return () => {
+      document.removeEventListener('click', handleUnlock)
+      document.removeEventListener('touchstart', handleUnlock)
+      stopBackgroundKeepAlive()
+    }
+  }, [])
 
   // Review states
   const [rating, setRating] = useState(0)
@@ -170,8 +204,35 @@ export default function OrderConfirmation() {
 
   const isDelivered = currentStatus === 'delivered'
 
+  // Listen to status changes and play corresponding sounds
+  useEffect(() => {
+    if (!currentStatus) return
+    const prevStatus = prevStatusRef.current
+
+    if (prevStatus && prevStatus !== currentStatus) {
+      if (currentStatus === 'preparing') {
+        playNewOrderNotification() // Plays Order Masuk.mp3
+        toast.info('🍳 Pesanan Anda mulai disiapkan di dapur!')
+      } else if (currentStatus === 'ready') {
+        playNewOrderNotification() // Plays Order Masuk.mp3
+        toast.info('📦 Pesanan Anda sudah siap dikirim!')
+      } else if (currentStatus === 'delivering') {
+        playDeliveredNotification('Pelanggan') // Plays Courier.mp3
+        toast.success('🛵 Kurir sedang mengantarkan pesanan Anda!')
+      }
+    }
+
+    prevStatusRef.current = currentStatus
+  }, [currentStatus])
+
   return (
     <main className="max-w-md mx-auto px-4 pb-24 pt-12 text-center animate-fade-in">
+      {/* Sound Warning Banner when blocked by Autoplay Policy */}
+      {!isAudioUnlocked && (
+        <div className="bg-amber-50 border border-amber-200 text-amber-800 rounded-2xl p-3.5 text-xs text-left mb-6 animate-pulse">
+          ⚠️ <strong>Notifikasi Suara Live Terkunci:</strong> Harap ketuk bagian layar mana saja untuk mengizinkan browser memutar suara notifikasi pesanan secara otomatis saat HP Anda terkunci.
+        </div>
+      )}
       {/* Dynamic Keyframe Animations */}
       <style>{`
         @keyframes premium-float {
