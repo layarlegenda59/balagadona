@@ -218,14 +218,14 @@ export default function AdminDashboard() {
       }
     })
 
-    // 2. Detect order status change to 'delivered'
+    // 2. Detect order status change to 'ready' (Siap Kirim)
     orders.forEach((newOrder) => {
       const prevOrder = prevOrders.find((o) => o.id === newOrder.id)
-      if (prevOrder && prevOrder.status !== 'delivered' && newOrder.status === 'delivered') {
+      if (prevOrder && prevOrder.status !== 'ready' && newOrder.status === 'ready') {
         if (isAudioEnabled) {
           playDeliveredNotification(newOrder.customer?.name || 'Pelanggan')
         }
-        toast.success(`✅ Pesanan ${newOrder.customer?.name || 'Pelanggan'} selesai diantar!`, {
+        toast.success(`📦 Pesanan ${newOrder.customer?.name || 'Pelanggan'} siap dikirim!`, {
           duration: 5000,
         })
       }
