@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import PasscodeGate from '../components/features/PasscodeGate'
 import InstallBanner from '../components/features/InstallBanner'
@@ -18,10 +18,94 @@ import {
 import { useDeliveryStore } from '../stores/deliveryStore'
 import { formatPrice } from '../constants/products'
 import { toast } from 'sonner'
+import { playDeliveredNotification, getSharedAudioContext } from '../lib/audio'
 
 export default function CourierDashboard() {
   const { batches, orders, updateOrderStatus } = useDeliveryStore()
   const [selectedBatchId, setSelectedBatchId] = useState('batch-1')
+
+  const [isAudioEnabled, setIsAudioEnabled] = useState(() => {
+    const saved = localStorage.getItem('courier-audio-enabled')
+    return saved !== 'false' // default to true if not set
+  })
+
+  const prevOrdersRef = useRef(orders)
+  const isFirstLoadRef = useRef(true)
+
+  // Background Audio Keep-Alive to prevent sleep/suspension when locked
+  useEffect(() => {
+    // 1. Looping silent HTML5 audio element
+    const audio = new Audio('data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA')
+    audio.loop = true
+
+    // 2. Persistent sub-audible Web Audio oscillator (1 Hz at 0.0001 volume) on the global context
+    let osc: OscillatorNode | null = null
+    let gain: GainNode | null = null
+    
+    const startKeepAlive = () => {
+      if (!isAudioEnabled) return
+      
+      try {
+        // Play silent HTML5 loop
+        audio.play().catch(err => console.warn('Silent HTML5 play failed:', err))
+
+        // Start sub-audible Web Audio oscillator on the global context
+        const ctx = getSharedAudioContext()
+        if (ctx) {
+          if (!osc) {
+            osc = ctx.createOscillator()
+            gain = ctx.createGain()
+            
+            osc.frequency.setValueAtTime(1, ctx.currentTime) // 1 Hz (sub-audible)
+            gain.gain.setValueAtTime(0.0001, ctx.currentTime) // virtually silent
+            
+            osc.connect(gain)
+            gain.connect(ctx.destination)
+            
+            osc.start()
+          } else if (ctx.state === 'suspended') {
+            ctx.resume().catch(e => console.warn(e))
+          }
+        }
+      } catch (err) {
+        console.warn('Keep-alive start failed:', err)
+      }
+    }
+
+    const stopKeepAlive = () => {
+      try {
+        audio.pause()
+        const ctx = getSharedAudioContext()
+        if (ctx && ctx.state === 'running') {
+          ctx.suspend().catch(e => console.warn(e))
+        }
+      } catch (err) {
+        console.warn('Keep-alive stop failed:', err)
+      }
+    }
+
+    // Trigger keep-alive on user interaction
+    const triggerStart = () => {
+      startKeepAlive()
+    }
+
+    if (isAudioEnabled) {
+      document.addEventListener('click', triggerStart)
+      document.addEventListener('touchstart', triggerStart)
+      startKeepAlive()
+    } else {
+      stopKeepAlive()
+    }
+
+    return () => {
+      document.removeEventListener('click', triggerStart)
+      document.removeEventListener('touchstart', triggerStart)
+      audio.pause()
+      if (osc) {
+        try { osc.stop() } catch(e){}
+      }
+    }
+  }, [isAudioEnabled])
 
   // Screen Wake Lock to keep the screen standby and prevent phone lock/sleep
   useEffect(() => {
@@ -38,10 +122,15 @@ export default function CourierDashboard() {
 
     requestLock()
 
-    // Re-acquire lock when visibility changes
+    // Re-acquire lock and resume audio context when visibility changes
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
         requestLock()
+        // Resume the global shared AudioContext if suspended
+        const ctx = getSharedAudioContext()
+        if (ctx && ctx.state === 'suspended') {
+          ctx.resume().catch(e => console.warn(e))
+        }
       }
     }
 
@@ -53,6 +142,36 @@ export default function CourierDashboard() {
       }
     }
   }, [])
+
+  // Initial load delay to avoid noise on first mount
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      isFirstLoadRef.current = false
+    }, 2000)
+    return () => clearTimeout(timer)
+  }, [])
+
+  // Sound trigger on order status transitioning to 'ready'
+  useEffect(() => {
+    const prevOrders = prevOrdersRef.current
+
+    orders.forEach((newOrder) => {
+      const prevOrder = prevOrders.find((o) => o.id === newOrder.id)
+      // Transition: not 'ready' previously, now 'ready'
+      if (prevOrder && prevOrder.status !== 'ready' && newOrder.status === 'ready') {
+        const isDemo = newOrder.id?.includes('DEMO')
+        if (!isDemo && isAudioEnabled && !isFirstLoadRef.current) {
+          playDeliveredNotification('Pelanggan') // Plays Courier.mp3
+          toast.info(`🔔 Pesanan ${newOrder.customer?.name || 'Pelanggan'} siap diantar!`, {
+            duration: 6000,
+          })
+        }
+      }
+    })
+
+    prevOrdersRef.current = orders
+  }, [orders, isAudioEnabled])
+
 
   // Filter orders for the selected batch
   const batchOrders = orders
@@ -107,6 +226,42 @@ export default function CourierDashboard() {
           <h1 className="font-display font-bold text-lg text-gray-800 leading-tight">Dashboard Kurir</h1>
           <p className="text-gray-500 text-[10px]">Jadwal & Urutan Pengiriman</p>
         </div>
+      </div>
+
+      {/* Sound Control Panel */}
+      <div className="bg-white border border-gray-100 rounded-2xl p-3.5 shadow-sm flex items-center justify-between gap-4 mb-4">
+        <div className="flex items-center gap-2.5">
+          <span className="text-xl">🔊</span>
+          <div className="text-left">
+            <h4 className="font-bold text-[#1F2937] text-xs">Asisten Suara Kurir</h4>
+            <p className="text-[9px] text-gray-500 leading-tight mt-0.5">
+              {isAudioEnabled 
+                ? 'Ringtone aktif & browser terkunci agar standby terus meski HP dikunci.' 
+                : 'Aktifkan suara agar ringtone & mode standby lock screen berjalan.'}
+            </p>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => {
+            const nextState = !isAudioEnabled
+            setIsAudioEnabled(nextState)
+            localStorage.setItem('courier-audio-enabled', String(nextState))
+            if (nextState) {
+              playDeliveredNotification('Pelanggan')
+              toast.success('🔔 Suara & Standby Lock Screen Aktif!')
+            } else {
+              toast.info('🔕 Suara & Standby Lock Screen Dinonaktifkan.')
+            }
+          }}
+          className={`px-3 py-2 rounded-xl text-[9px] font-bold shrink-0 transition-all active:scale-95 flex items-center gap-1 shadow-sm border ${
+            isAudioEnabled
+              ? 'bg-green-50 hover:bg-green-100 text-green-700 border-green-200'
+              : 'bg-amber-500 hover:bg-amber-600 text-white border-amber-600 animate-pulse'
+          }`}
+        >
+          <span>{isAudioEnabled ? '🔊 Suara Aktif' : '🔊 Aktifkan Suara'}</span>
+        </button>
       </div>
 
       {/* Select Batch - Horizontal Scroll Tabs */}
