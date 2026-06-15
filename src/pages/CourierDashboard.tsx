@@ -32,6 +32,34 @@ export default function CourierDashboard() {
   const prevOrdersRef = useRef(orders)
   const isFirstLoadRef = useRef(true)
 
+  const [isAudioUnlocked, setIsAudioUnlocked] = useState(false)
+
+  // Listen to browser user interaction to unlock/resume AudioContext
+  useEffect(() => {
+    const checkAudioUnlocked = () => {
+      const ctx = getSharedAudioContext()
+      if (ctx && ctx.state === 'running') {
+        setIsAudioUnlocked(true)
+      } else {
+        setIsAudioUnlocked(false)
+      }
+    }
+
+    checkAudioUnlocked()
+
+    const handleUnlock = () => {
+      setTimeout(checkAudioUnlocked, 100)
+    }
+
+    document.addEventListener('click', handleUnlock)
+    document.addEventListener('touchstart', handleUnlock)
+
+    return () => {
+      document.removeEventListener('click', handleUnlock)
+      document.removeEventListener('touchstart', handleUnlock)
+    }
+  }, [])
+
   // Background Audio Keep-Alive to prevent sleep/suspension when locked
   useEffect(() => {
     // 1. Looping silent HTML5 audio element
@@ -160,7 +188,7 @@ export default function CourierDashboard() {
       // Transition: not 'ready' previously, now 'ready'
       if (prevOrder && prevOrder.status !== 'ready' && newOrder.status === 'ready') {
         const isDemo = newOrder.id?.includes('DEMO')
-        if (!isDemo && isAudioEnabled && !isFirstLoadRef.current) {
+        if (!isDemo && isAudioEnabled) {
           playDeliveredNotification('Pelanggan') // Plays Courier.mp3
           toast.info(`🔔 Pesanan ${newOrder.customer?.name || 'Pelanggan'} siap diantar!`, {
             duration: 6000,
@@ -228,6 +256,13 @@ export default function CourierDashboard() {
         </div>
       </div>
 
+      {/* Sound Warning Banner when blocked by Autoplay Policy */}
+      {isAudioEnabled && !isAudioUnlocked && (
+        <div className="bg-amber-50 border border-amber-200 text-amber-800 rounded-2xl p-3.5 text-xs text-left mb-4 animate-pulse">
+          ⚠️ <strong>Notifikasi Suara Terkunci:</strong> Harap ketuk tombol di bawah atau bagian layar mana saja untuk mengaktifkan notifikasi suara kurir secara otomatis.
+        </div>
+      )}
+
       {/* Sound Control Panel */}
       <div className="bg-white border border-gray-100 rounded-2xl p-3.5 shadow-sm flex items-center justify-between gap-4 mb-4">
         <div className="flex items-center gap-2.5">
@@ -244,6 +279,12 @@ export default function CourierDashboard() {
         <button
           type="button"
           onClick={() => {
+            if (isAudioEnabled && !isAudioUnlocked) {
+              // Trigger play to unlock
+              playDeliveredNotification('Pelanggan')
+              toast.success('🔔 Suara & Standby Lock Screen Aktif!')
+              return
+            }
             const nextState = !isAudioEnabled
             setIsAudioEnabled(nextState)
             localStorage.setItem('courier-audio-enabled', String(nextState))
@@ -256,11 +297,19 @@ export default function CourierDashboard() {
           }}
           className={`px-3 py-2 rounded-xl text-[9px] font-bold shrink-0 transition-all active:scale-95 flex items-center gap-1 shadow-sm border ${
             isAudioEnabled
-              ? 'bg-green-50 hover:bg-green-100 text-green-700 border-green-200'
-              : 'bg-amber-500 hover:bg-amber-600 text-white border-amber-600 animate-pulse'
+              ? isAudioUnlocked
+                ? 'bg-green-50 hover:bg-green-100 text-green-700 border-green-200'
+                : 'bg-amber-500 hover:bg-amber-600 text-white border-amber-600 animate-pulse'
+              : 'bg-gray-100 hover:bg-gray-200 text-gray-500 border-gray-200'
           }`}
         >
-          <span>{isAudioEnabled ? '🔊 Suara Aktif' : '🔊 Aktifkan Suara'}</span>
+          <span>
+            {isAudioEnabled
+              ? isAudioUnlocked
+                ? '🔊 Suara Aktif'
+                : '🔊 Ketuk untuk Aktifkan'
+              : '🔇 Suara Mati'}
+          </span>
         </button>
       </div>
 
