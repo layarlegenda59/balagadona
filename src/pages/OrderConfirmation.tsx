@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { CheckCircle, CheckCircle2, Home, UtensilsCrossed, Copy, Clock, Bike, ChefHat, CheckSquare, Star } from 'lucide-react'
+import { CheckCircle, CheckCircle2, Home, UtensilsCrossed, Copy, Clock, Bike, ChefHat, CheckSquare, Star, FileDown, Share2 } from 'lucide-react'
 import { OrderData } from '../types'
 import { useDeliveryStore } from '../stores/deliveryStore'
 import { toast } from 'sonner'
 import { motion, AnimatePresence } from 'framer-motion'
 import logoImage from '../assets/Logo Balagadona_fix.png'
 import { supabase } from '../lib/supabase'
+import { generateReceiptPDF } from '../lib/pdf'
 
 export default function OrderConfirmation() {
 
@@ -77,6 +78,62 @@ export default function OrderConfirmation() {
       return
     }
 
+    // Warm, friendly Indonesian female voice assistant thank-you greeting
+    // Triggered synchronously first to comply with browser user gesture policies
+    if ('speechSynthesis' in window) {
+      // More natural, conversational text with pauses (commas/ellipsis signal natural breathing)
+      let speechText = ''
+      if (rating === 5) {
+        speechText = `Waaah, makasih banget ya sudah kasih bintang lima! Kami seneng banget deh dengernya. Semoga Batagornya tadi enak dan bikin kenyang ya. Ditunggu pesanan berikutnya, kapan aja boleh!`
+      } else if (rating === 4) {
+        speechText = `Terima kasih ya atas bintang empatnya, kami senang banget kamu puas. Kalau ada yang bisa kami tingkatin lagi, kasih tau kami ya. Sampai ketemu di pesanan berikutnya!`
+      } else if (rating === 3) {
+        speechText = `Makasih ya udah mau kasih masukan. Kami minta maaf kalau ada yang belum sesuai harapan kamu. Kami akan terus berusaha jadi lebih baik, ya!`
+      } else {
+        speechText = `Aduh, kami minta maaf banget ya atas pengalaman yang kurang menyenangkan. Masukan kamu sangat berarti buat kami. Kami janji akan terus belajar dan memperbaiki diri. Terima kasih banyak ya, sudah mau jujur sama kami.`
+      }
+
+      try {
+        window.speechSynthesis.cancel()
+
+        const utterance = new SpeechSynthesisUtterance(speechText)
+        utterance.lang = 'id-ID'
+        utterance.rate = 0.88   // Slightly slower = natural conversational pacing
+        utterance.pitch = 1.1   // A touch higher for feminine, warm tone
+        utterance.volume = 1.0
+
+        // Auto-select the best available Indonesian female voice
+        const applyVoiceAndSpeak = () => {
+          const voices = window.speechSynthesis.getVoices()
+          if (voices.length > 0) {
+            // Priority order: Indonesian Wavenet female > Indonesian Standard female > any Indonesian > fallback
+            const femaleVoice =
+              voices.find(v => v.lang === 'id-ID' && /wavenet-[ace]/i.test(v.name)) ||
+              voices.find(v => v.lang === 'id-ID' && /female|wanita|perempuan/i.test(v.name)) ||
+              voices.find(v => v.lang === 'id-ID' && /standard-[ace]/i.test(v.name)) ||
+              voices.find(v => v.lang === 'id-ID' && !(/male|pria|laki/i.test(v.name))) ||
+              voices.find(v => v.lang === 'id-ID') ||
+              voices.find(v => v.lang.startsWith('id'))
+            if (femaleVoice) utterance.voice = femaleVoice
+          }
+          window.speechSynthesis.speak(utterance)
+        }
+
+        // Voices may not be loaded yet on first call — wait if needed
+        if (window.speechSynthesis.getVoices().length > 0) {
+          applyVoiceAndSpeak()
+        } else {
+          window.speechSynthesis.onvoiceschanged = () => {
+            window.speechSynthesis.onvoiceschanged = null
+            applyVoiceAndSpeak()
+          }
+          setTimeout(applyVoiceAndSpeak, 150) // Fallback if onvoiceschanged never fires
+        }
+      } catch (speechErr) {
+        console.warn('Speech synthesis failed to play:', speechErr)
+      }
+    }
+
     const customerName = order?.customer?.name || 'Pelanggan'
 
     try {
@@ -92,27 +149,6 @@ export default function OrderConfirmation() {
       console.error('Failed to submit review to Supabase:', err)
     }
 
-    // Warm, friendly Indonesian voice assistant thank-you greeting
-    if ('speechSynthesis' in window) {
-      let speechText = ''
-      if (rating >= 4) {
-        speechText = `Terima kasih banyak atas ulasan bintang ${rating} nya! Kami sangat senang Anda menyukai Batagor Balagadona hangat kami. Ditunggu pesanan berikutnya, ya!`
-      } else {
-        speechText = `Terima kasih banyak atas masukan Anda. Kami memohon maaf jika ada kekurangan, masukan Anda sangat berharga bagi kami untuk meningkatkan kualitas pelayanan.`
-      }
-      
-      try {
-        window.speechSynthesis.cancel() // Cancel any pending utterances
-        const utterance = new SpeechSynthesisUtterance(speechText)
-        utterance.lang = 'id-ID'
-        utterance.rate = 1.05
-        utterance.pitch = 1.1
-        window.speechSynthesis.speak(utterance)
-      } catch (speechErr) {
-        console.warn('Speech synthesis failed to play:', speechErr)
-      }
-    }
-
     setReviewSubmitted(true)
     toast.success('Ulasan Anda berhasil dikirim! Terima kasih.')
   }
@@ -123,7 +159,18 @@ export default function OrderConfirmation() {
   useEffect(() => {
     const saved = localStorage.getItem('lastOrder')
     if (saved) {
-      setOrder(JSON.parse(saved))
+      const parsedOrder = JSON.parse(saved) as OrderData
+      setOrder(parsedOrder)
+
+      if (parsedOrder?.id) {
+        // Retrieve and update local order history for loyalty loops
+        const historySaved = localStorage.getItem('balagadona-order-history')
+        const history = historySaved ? JSON.parse(historySaved) : []
+        if (!history.includes(parsedOrder.id)) {
+          const nextHistory = [...history, parsedOrder.id]
+          localStorage.setItem('balagadona-order-history', JSON.stringify(nextHistory))
+        }
+      }
     }
   }, [])
 
@@ -478,8 +525,52 @@ export default function OrderConfirmation() {
         </div>
       </div>
 
+      {/* Premium Referral & Share Card (Viral Loop) */}
+      <div className="bg-[#F9A825]/10 border border-[#F9A825]/30 rounded-2xl p-4 text-left mb-6 mt-4">
+        <div className="flex items-start gap-2.5">
+          <span className="text-xl">📢</span>
+          <div>
+            <h4 className="font-bold text-[#1F2937] text-xs leading-snug">Bagikan Kelezatan Balagadona</h4>
+            <p className="text-[10px] text-gray-500 mt-0.5 leading-relaxed">
+              Rekomendasikan batagor renyah premium terlezat di Cimahi ke teman-temanmu di WhatsApp!
+            </p>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => {
+            const shareText = `Wah, saya baru saja memesan Batagor Balagadona hangat yang super renyah dan bumbunya juara banget! Batagor premium terlezat di Cimahi. Kamu juga harus coba, pesan praktis langsung di sini: https://batagor-balagadona.vercel.app 😋🔥`
+            const shareUrl = `https://wa.me/?text=${encodeURIComponent(shareText)}`
+            window.open(shareUrl, '_blank', 'noopener,noreferrer')
+          }}
+          className="w-full bg-[#16A34A] hover:bg-[#15803d] text-white py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all active:scale-95 mt-3 shadow-sm"
+        >
+          <Share2 className="w-4 h-4" />
+          <span>Bagikan ke WhatsApp Teman</span>
+        </button>
+      </div>
+
       {/* Actions */}
       <div className="flex flex-col gap-3">
+        {order && (
+          <button
+            type="button"
+            onClick={() => {
+              try {
+                generateReceiptPDF(order)
+                toast.success('Struk digital berhasil disimpan!')
+              } catch (err) {
+                console.error(err)
+                toast.error('Gagal mengunduh struk.')
+              }
+            }}
+            className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all active:scale-95 shadow-sm"
+          >
+            <FileDown className="w-4 h-4" />
+            <span>Simpan Struk Digital (PDF)</span>
+          </button>
+        )}
+        
         <Link to="/" className="btn-primary w-full gap-2">
           <Home className="w-4 h-4" />
           Kembali ke Beranda

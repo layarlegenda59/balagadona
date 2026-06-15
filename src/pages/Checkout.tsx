@@ -54,14 +54,13 @@ export default function Checkout() {
   const isFreeOngkir = totalPortions >= 3 && selectedDistance === 'near'
   const deliveryFee = isFreeOngkir ? 0 : activeDistanceSlot.value
 
+  const isStoreClosed = batches.some(b => b.id === 'store-settings' && b.maxQuota === 0)
+
   // Filter batches dynamically based on operational hours (on Fridays we open late at 13:30, so hide Batch 1 & 2)
   const isFriday = new Date().getDay() === 5
-  const visibleBatches = batches.filter(b => {
-    if (isFriday) {
-      return b.id !== 'batch-1' && b.id !== 'batch-2'
-    }
-    return true
-  })
+  const visibleBatches = batches.filter(b => b.id !== 'store-settings' && (
+    isFriday ? b.id !== 'batch-1' && b.id !== 'batch-2' : true
+  ))
 
   // Find first batch that is not full
   const availableBatch = visibleBatches.find(b => getRemainingQuota(b.id) > 0)
@@ -255,7 +254,7 @@ export default function Checkout() {
     setValue('address', p.address)
   }
 
-  const onSubmit = (data: FormData) => {
+  const onSubmit = async (data: FormData) => {
     const remaining = getRemainingQuota(selectedTime)
     if (remaining <= 0) {
       const anyAvailable = visibleBatches.some(b => getRemainingQuota(b.id) > 0)
@@ -315,18 +314,17 @@ export default function Checkout() {
       status: 'pending' as const,
     }
     localStorage.setItem('lastOrder', JSON.stringify(order))
-    addOrder(order)
-    clearCart()
-
-    // Automatically trigger receipt PDF download for the customer
+    const saveToastId = toast.loading('Sedang memproses pesanan...')
     try {
-      generateReceiptPDF(order)
+      await addOrder(order)
+      toast.dismiss(saveToastId)
+      clearCart()
+      window.open(waUrl, '_blank', 'noopener,noreferrer')
+      navigate('/order-confirmation')
     } catch (err) {
-      console.error('Failed to auto-download PDF receipt:', err)
+      toast.error('Gagal mengirim pesanan. Silakan coba lagi.')
+      toast.dismiss(saveToastId)
     }
-
-    window.open(waUrl, '_blank', 'noopener,noreferrer')
-    navigate('/order-confirmation')
   }
 
 
@@ -346,6 +344,19 @@ export default function Checkout() {
           <p className="text-gray-500 text-sm">Lengkapi data pengiriman</p>
         </div>
       </div>
+
+      {/* Tutup Kedai Warning Banner */}
+      {isStoreClosed && (
+        <div className="mx-4 mb-4 bg-red-100 border border-red-200 text-red-700 px-4 py-3 rounded-2xl flex items-start gap-2.5 shadow-sm animate-pulse">
+          <span className="text-xl shrink-0">⚠️</span>
+          <div>
+            <h4 className="font-bold text-xs">Kedai Tutup Sementara</h4>
+            <p className="text-[10px] text-red-600 mt-0.5 leading-relaxed">
+              Mohon maaf, kedai kami sedang tutup sementara. Silakan kembali lagi nanti untuk melakukan pemesanan!
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* ── SAVED ADDRESSES CRUD PANEL ── */}
       <div className="px-4 mb-4">
@@ -566,9 +577,18 @@ export default function Checkout() {
             </div>
 
             {errorMsg && (
-              <p className="text-[10px] text-red-500 font-medium bg-red-50 border border-red-100 rounded-xl py-2 px-3">
-                {errorMsg}
-              </p>
+              <div className="space-y-2">
+                <p className="text-[10px] text-red-500 font-medium bg-red-50 border border-red-100 rounded-xl py-2 px-3">
+                  {errorMsg}
+                </p>
+                {/* Visual Guide Box for enabling permissions */}
+                <div className="bg-amber-50 border border-amber-200 text-amber-800 rounded-xl p-3 text-[9px] leading-relaxed space-y-1">
+                  <span className="font-bold uppercase text-[8px] text-amber-600 block">Cara Mengaktifkan Izin Lokasi:</span>
+                  <p>1. Ketuk ikon <strong>Kunci (Lock)</strong> atau ikon <strong>Info (i)</strong> di sebelah kiri bilah alamat browser Anda.</p>
+                  <p>2. Cari menu <strong>Lokasi (Location)</strong>.</p>
+                  <p>3. Ubah izin menjadi <strong>Izinkan (Allow)</strong>, kemudian muat ulang halaman (refresh) dan coba lagi.</p>
+                </div>
+              </div>
             )}
 
             <div className="flex gap-2">
@@ -753,10 +773,14 @@ export default function Checkout() {
           return (
             <button
               type="submit"
-              disabled={isSubmitting || isSelectedBatchFull}
+              disabled={isSubmitting || isSelectedBatchFull || isStoreClosed}
               className="w-full btn-primary py-4 text-base font-bold mt-4 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {isSelectedBatchFull ? 'Slot Pengiriman Penuh' : 'Kirim Pesanan via WhatsApp'}
+              {isStoreClosed 
+                ? 'Kedai Sedang Tutup' 
+                : isSelectedBatchFull 
+                ? 'Slot Pengiriman Penuh' 
+                : 'Kirim Pesanan via WhatsApp'}
             </button>
           )
         })()}

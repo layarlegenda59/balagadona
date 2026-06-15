@@ -19,6 +19,20 @@ export default function Home() {
   // Real-time testimonials syncing (initially fallback to static constants)
   const [dynamicTestimonials, setDynamicTestimonials] = useState<any[]>(TESTIMONIALS)
 
+  const [loyaltyCount, setLoyaltyCount] = useState(0)
+
+  useEffect(() => {
+    const historySaved = localStorage.getItem('balagadona-order-history')
+    if (historySaved) {
+      const history = JSON.parse(historySaved)
+      if (Array.isArray(history)) {
+        const totalOrders = history.length
+        const stamps = totalOrders % 5 === 0 && totalOrders > 0 ? 5 : totalOrders % 5
+        setLoyaltyCount(stamps)
+      }
+    }
+  }, [])
+
   useEffect(() => {
     const fetchLatestReviews = async () => {
       try {
@@ -225,6 +239,72 @@ export default function Home() {
           </div>
         </div>
       </section>
+
+      {/* ── CUSTOMER LOYALTY STAMP CARD (HIDDEN FOR NOW) ── */}
+      {false && (
+        <section className="px-4 pt-6">
+          <div className="bg-gradient-to-br from-[#1F2937] to-[#111827] rounded-3xl p-5 text-white shadow-xl relative overflow-hidden border border-gray-800">
+            <div className="absolute -right-6 -top-6 w-24 h-24 bg-[#C62828]/10 rounded-full blur-2xl animate-pulse" />
+            
+            <div className="flex justify-between items-start mb-3">
+              <div>
+                <h3 className="font-display font-bold text-sm text-white flex items-center gap-1.5">
+                  🌟 Kartu Loyalitas Balagadona
+                </h3>
+                <p className="text-[10px] text-gray-400 mt-0.5">
+                  Kumpulkan 5 stempel order untuk mendapatkan 1 porsi gratis!
+                </p>
+              </div>
+              {loyaltyCount === 5 && (
+                <span className="bg-[#16A34A] text-white text-[9px] font-bold px-2 py-0.5 rounded-full animate-bounce">
+                  Siap Diklaim!
+                </span>
+              )}
+            </div>
+
+            {/* Stamps Row */}
+            <div className="flex justify-between items-center gap-2 py-3 bg-white/5 rounded-2xl px-4 border border-white/5">
+              {[1, 2, 3, 4, 5].map((index) => {
+                const isStamped = index <= loyaltyCount
+                return (
+                  <div
+                    key={index}
+                    className={`w-10 h-10 rounded-full flex items-center justify-center border-2 transition-all duration-300 relative ${
+                      isStamped
+                        ? 'border-[#F9A825] bg-[#F9A825]/20 text-[#F9A825] scale-110 shadow-lg shadow-[#F9A825]/25'
+                        : 'border-white/10 bg-transparent text-white/20'
+                    }`}
+                  >
+                    {isStamped ? (
+                      <span className="text-base font-extrabold animate-fade-in">⭐</span>
+                    ) : (
+                      <span className="text-xs font-bold">{index}</span>
+                    )}
+                    {isStamped && (
+                      <span className="absolute -bottom-1 -right-1 bg-[#F9A825] text-gray-900 font-extrabold text-[7px] w-3 h-3 rounded-full flex items-center justify-center">
+                        ✓
+                      </span>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* Helper feedback text */}
+            <div className="mt-3 text-[10px] leading-relaxed text-gray-300">
+              {loyaltyCount === 5 ? (
+                <p className="text-[#F9A825] font-bold">
+                  🎉 Selamat! Anda memiliki 5 stempel. Tunjukkan bukti pemesanan ini kepada admin via WhatsApp untuk mendapatkan 1 porsi Batagor Gratis pada pesanan berikutnya!
+                </p>
+              ) : (
+                <p>
+                  Anda sudah mengumpulkan <strong>{loyaltyCount} stempel</strong>. Butuh <strong>{5 - loyaltyCount} order lagi</strong> untuk mengklaim porsi gratis Anda!
+                </p>
+              )}
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* ── PROMO BANNER ── */}
       <PromoBanner />
