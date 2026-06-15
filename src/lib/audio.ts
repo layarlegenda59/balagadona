@@ -1,5 +1,6 @@
 import orderMasukAudio from '../assets/Order Masuk.mp3'
 import courierAudio from '../assets/Courier.mp3'
+import selesaiAudio from '../assets/Selesai.mp3'
 
 let sharedAudioCtx: AudioContext | null = null
 
@@ -46,6 +47,18 @@ export const playDeliveredNotification = (customerName: string) => {
     })
   } catch (err) {
     console.error('Failed to play Delivered notification:', err)
+  }
+}
+
+// Play selesai order sound using the new custom selesai asset
+export const playSelesaiNotification = () => {
+  try {
+    const audio = new Audio(selesaiAudio)
+    audio.play().catch(err => {
+      console.warn('Failed to play Selesai audio (Selesai.mp3):', err)
+    })
+  } catch (err) {
+    console.error('Failed to play Selesai notification:', err)
   }
 }
 

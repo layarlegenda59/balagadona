@@ -24,7 +24,7 @@ import { useDeliveryStore, getMockCoords } from '../stores/deliveryStore'
 import { formatPrice } from '../constants/products'
 import { toast } from 'sonner'
 import { DeliveryBatch, OrderData } from '../types'
-import { playNewOrderNotification, playDeliveredNotification, getSharedAudioContext, startBackgroundKeepAlive, stopBackgroundKeepAlive } from '../lib/audio'
+import { playNewOrderNotification, playDeliveredNotification, playSelesaiNotification, getSharedAudioContext, startBackgroundKeepAlive, stopBackgroundKeepAlive } from '../lib/audio'
 
 
 export default function AdminDashboard() {
@@ -172,6 +172,19 @@ export default function AdminDashboard() {
           playDeliveredNotification(newOrder.customer?.name || 'Pelanggan')
         }
         toast.success(`📦 Pesanan ${newOrder.customer?.name || 'Pelanggan'} siap dikirim!`, {
+          duration: 5000,
+        })
+      }
+    })
+
+    // 3. Detect order status change to 'delivered' (Selesai)
+    orders.forEach((newOrder) => {
+      const prevOrder = prevOrders.find((o) => o.id === newOrder.id)
+      if (prevOrder && prevOrder.status !== 'delivered' && newOrder.status === 'delivered') {
+        if (isAudioEnabled) {
+          playSelesaiNotification()
+        }
+        toast.success(`✅ Pesanan ${newOrder.customer?.name || 'Pelanggan'} selesai diantar!`, {
           duration: 5000,
         })
       }
