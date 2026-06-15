@@ -1,5 +1,19 @@
 {
   "rewrites": [
     { "source": "/(.*)", "destination": "/index.html" }
+  ],
+  "headers": [
+    {
+      "source": "/manifest.json",
+      "headers": [{ "key": "Content-Type", "value": "application/manifest+json" }]
+    },
+    {
+      "source": "/manifest-admin.json",
+      "headers": [{ "key": "Content-Type", "value": "application/manifest+json" }]
+    },
+    {
+      "source": "/manifest-courier.json",
+      "headers": [{ "key": "Content-Type", "value": "application/manifest+json" }]
+    }
   ]
 }
